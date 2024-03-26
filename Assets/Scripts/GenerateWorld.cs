@@ -11,14 +11,17 @@ public class GenerateWorld : MonoBehaviour
 
     [Space]
     [Header("Procedural Generation")]
+    [SerializeField] private bool _useNoise = true;
     [SerializeField] private int _seed = 13;
     [SerializeField] private int _octaves = 3;
     [SerializeField] private float _frequency = 20.0f;
     [SerializeField] private float _amplitude = 0.5f;
     [SerializeField] private int _terrainHeight = 10;
-
+    
     [SerializeField] private bool _generate = false;
-
+    
+    //private HashMap<Vector2, Chunk> _chunks = new Dictionary<Vector2, Chunk>();
+    
     // DEBUG
     void Update()
     {
@@ -61,21 +64,28 @@ public class GenerateWorld : MonoBehaviour
                     for (int voxelZ = 0; voxelZ < _chunkSizeInVoxels; voxelZ++)
                     {
                         // Generate a random height (TODO use Perlin noise)
-                        //float height = Random.value * 2;
+                        //float 
 
 
                         // Terrain gen but not really working good
                         float height = 1;
-                        float frequency = _frequency;
-                        float amplitude = _amplitude;
-                        for (int octave = 0; octave < _octaves; octave++)
-                        {
-                            height += (Mathf.PerlinNoise((chunkPosition.x + voxelX) / frequency + randomOffset,
-                                                        (chunkPosition.z + voxelZ) / frequency + randomOffset) * 2 - 1) * amplitude;
-                            frequency *= _frequency;
-                            amplitude *= _amplitude;
+
+                        if (_useNoise) {
+                            float frequency = _frequency;
+                            float amplitude = _amplitude;
+                            for (int octave = 0; octave < _octaves; octave++)
+                            {
+                                height += (Mathf.PerlinNoise((chunkPosition.x + voxelX) / frequency + randomOffset,
+                                                            (chunkPosition.z + voxelZ) / frequency + randomOffset) * 2 - 1) * amplitude;
+                                frequency *= _frequency;
+                                amplitude *= _amplitude;
+                            }
+                            height *= _terrainHeight;
                         }
-                        height *= _terrainHeight;
+                        else {
+                            height = Random.value * _terrainHeight;;
+                        }
+
                         if (height < 1) height = 1;
 
                         for (int voxelY = 0; voxelY < height; voxelY++)
@@ -83,8 +93,16 @@ public class GenerateWorld : MonoBehaviour
                             // Generate a random color for each voxel for now
                             //Color color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
                             Color color;
-                            if (voxelY + 1 > height) color = new Color(0f, 0.2f, 0f);
-                            else                      color = new Color(0.4f, 0.3f, 0f);
+                            if (_useNoise)
+                            {
+                                if (voxelY + 1 > height) color = new Color(0f, 0.2f, 0f);
+                                else                      color = new Color(0.4f, 0.3f, 0f);
+                            }
+                            else
+                            {
+                                color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
+                            }
+                            
                             chunk[new Vector3(voxelX, voxelY, voxelZ)] = new Voxel() {color=color};
                         }
                     }                    
