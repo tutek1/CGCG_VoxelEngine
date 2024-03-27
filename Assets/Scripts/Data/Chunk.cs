@@ -2,14 +2,15 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Random = UnityEngine.Random;
+
 
 [RequireComponent(typeof(MeshFilter))]
 [RequireComponent(typeof(MeshRenderer))]
 [RequireComponent(typeof(MeshCollider))]
 public class Chunk : MonoBehaviour
 {
-    public Vector3 voxelPos;
-    public bool add;
+    private int _voxelsInChunk;
 
     private Dictionary<Vector3, Voxel> voxels = new Dictionary<Vector3, Voxel>();
 
@@ -18,7 +19,11 @@ public class Chunk : MonoBehaviour
     private MeshCollider _meshCollider;
     private Mesh _mesh;
 
+    // DEBUG
+    public Vector3 voxelToAddPos;
+    public bool add;
 
+    // DEBUG
     private void Update()
     {
         if (add)
@@ -36,6 +41,65 @@ public class Chunk : MonoBehaviour
         _meshFilter = GetComponent<MeshFilter>();
         _mesh = _meshFilter.mesh;
         _meshRenderer.material = voxelMaterial;
+    }
+
+    public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequency,
+                               float amplitude, int terrainHeight, int voxelsInChunk)
+    {
+        _voxelsInChunk = voxelsInChunk;
+        
+        // Setup seed
+        Random.InitState(seed);
+        float randomOffset = Random.value * 100000f;
+
+        // Cache position
+        Vector3 pos = transform.position;
+
+        // Generate all voxels and add them to a chunk
+        for (int voxelX = 0; voxelX < _voxelsInChunk; voxelX++)
+        {
+            for (int voxelZ = 0; voxelZ < _voxelsInChunk; voxelZ++)
+            {
+                // Terrain gen but not really working good
+                float height = 1;
+
+                if (useNoise) {
+                    float tempFrequency = frequency;
+                    float tempAmplitude = amplitude;
+                    for (int octave = 0; octave < octaves; octave++)
+                    {
+                        height += (Mathf.PerlinNoise((pos.x + voxelX) / tempFrequency + randomOffset,
+                                                    (pos.z + voxelZ) / tempFrequency + randomOffset) * 2 - 1) * tempAmplitude;
+                        tempFrequency *= frequency;
+                        tempAmplitude *= amplitude;
+                    }
+                    height *= terrainHeight;
+                }
+                else {
+                    height = Random.value * terrainHeight;
+                }
+
+                if (height < 1) height = 1;
+
+                for (int voxelY = 0; voxelY < height; voxelY++)
+                {
+                    // Generate a random color for each voxel for now
+                    //Color color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
+                    Color color;
+                    if (useNoise)
+                    {
+                        if (voxelY + 1 > height) color = new Color(0f, 0.2f, 0f);
+                        else                      color = new Color(0.4f, 0.3f, 0f);
+                    }
+                    else
+                    {
+                        color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
+                    }
+                    
+                    voxels[new Vector3(voxelX, voxelY, voxelZ)] = new Voxel() {color=color};
+                }
+            }                    
+        }
     }
 
     public void GenerateMesh()
