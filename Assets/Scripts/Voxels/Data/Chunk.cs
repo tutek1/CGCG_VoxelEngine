@@ -13,7 +13,7 @@ public class Chunk : MonoBehaviour
 {
     private const uint DEFAULT_SIZE = 16;
 
-    //Debug
+    //Debug public to be pribate
     public bool _useNoise;
     public int _seed;
     public int _octaves;
@@ -22,15 +22,14 @@ public class Chunk : MonoBehaviour
     public int _terrainHeight;
     public int _voxelsInChunk;
 
+    private GenerateWorld _generateWorld;
     private Dictionary<Vector3, Voxel> voxels = new Dictionary<Vector3, Voxel>();
-
     private MeshRenderer _meshRenderer;
     private MeshFilter _meshFilter;
     private MeshCollider _meshCollider;
     private Mesh _mesh;
 
-    // DEBUG
-    public Vector3 voxelToAddPos;
+    // DEBUG button for reload of chunk
     public bool reload;
 
     // DEBUG
@@ -40,19 +39,20 @@ public class Chunk : MonoBehaviour
         {
             reload = false;
             voxels.Clear();
-            Init(GetComponent<MeshRenderer>().material);
+            Init(_generateWorld, GetComponent<MeshRenderer>().material);
             GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
             GenerateMesh();
         }
     }
 
-    public void Init(Material voxelMaterial)
+    public void Init(GenerateWorld generateWorld, Material voxelMaterial)
     {
         _meshCollider = GetComponent<MeshCollider>();
         _meshRenderer = GetComponent<MeshRenderer>();
         _meshFilter = GetComponent<MeshFilter>();
         _mesh = _meshFilter.mesh;
         _meshRenderer.material = voxelMaterial;
+        _generateWorld = generateWorld;
     }
 
     public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequency,
@@ -88,6 +88,7 @@ public class Chunk : MonoBehaviour
                 if (_useNoise) {
                     float tempFrequency = _frequency;
                     float tempAmplitude = _amplitude;
+                    // OCTAVES ARE CURRENTLY NOT WORKING
                     for (int octave = 0; octave < _octaves; octave++)
                     {
                         noise += (Mathf.PerlinNoise(voxelRealPostion.x / tempFrequency + randomOffset,
@@ -146,9 +147,29 @@ public class Chunk : MonoBehaviour
             for (int i = 0; i < 6; i++)
             {
                 // Don't draw faces that are hidden
-                if (this[voxelPos + DIRECTIONS[i]] != null)
+                Vector3 faceVoxelNeighborPos = voxelPos + DIRECTIONS[i];
+                if (this[faceVoxelNeighborPos] != null)
                     continue;
 
+                // Check for chunk edges (except for blocks on the top, which need to be have an extra face outwards for holeless LOD transitions)
+                if (voxels.ContainsKey(voxelPos + Vector3.up) &&
+                (voxelPos.x == 0 || voxelPos.x == _voxelsInChunk - 1 || voxelPos.z == 0 || voxelPos.z == _voxelsInChunk - 1))
+                {
+                    Vector3 voxelPosInOtherChunk = voxelPos + DIRECTIONS[i];
+                    if (voxelPosInOtherChunk.x == -1 || voxelPosInOtherChunk.x == _voxelsInChunk ||
+                        voxelPosInOtherChunk.z == -1 || voxelPosInOtherChunk.z == _voxelsInChunk)
+                    {
+                        voxelPosInOtherChunk.x = voxelPosInOtherChunk.x < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.x % _voxelsInChunk;
+                        //voxelPosInOtherChunk.y = voxelPosInOtherChunk.y < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.y % _voxelsInChunk;
+                        voxelPosInOtherChunk.z = voxelPosInOtherChunk.z < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.z % _voxelsInChunk;
+                        if (transform.position == new Vector3(-16f, 0f,0f))Debug.Log(transform.position + " chunk is checking, " + voxelPos + " voxPos, " + DIRECTIONS[i] + " dir, " + voxelPosInOtherChunk + " pos in other chunk " + (transform.position + DIRECTIONS[i]*16));
+                        if (_generateWorld.IsVoxelInChunkPresentAndNotTop(transform.position + DIRECTIONS[i]*16, voxelPosInOtherChunk))
+                        {
+                            Debug.Log("SKIP");
+                            continue;
+                        }
+                    }
+                }
 
                 //Collect the appropriate vertices from the default vertices and add the block position
                 for (int j = 0; j < 4; j++)
@@ -184,34 +205,33 @@ public class Chunk : MonoBehaviour
     }
 
     public Voxel? this[Vector3 index]
+    {
+        get
         {
-            get
-            {
-                if (voxels.ContainsKey(index))
-                    return voxels[index];
-                else
-                    return null;
-            }
+            if (voxels.ContainsKey(index))
+                return voxels[index];
+            else
+                return null;
+        }
 
-            set
-            {
-                if (value == null) return;
-                
-                // Unity has a max number of faces 65 534 -> 5 460 voxels max
-                /*if (voxels.Count > 5460) 
-                {
-                    Debug.LogError("Too many voxels in one chunk!");
-                    return;
-                }*/
+        set
+        {
+            if (value == null) return;
 
-                if (voxels.ContainsKey(index))
-                    voxels[index] = (Voxel)value;
-                else
-                {
-                    voxels.Add(index, (Voxel)value);
-                }
+            if (voxels.ContainsKey(index))
+                voxels[index] = (Voxel)value;
+            else
+            {
+                voxels.Add(index, (Voxel)value);
             }
         }
+    }
+
+    public bool IsVoxelPresent(Vector3 index)
+    {
+        Debug.Log(voxels.Keys);
+        return voxels.ContainsKey(index);
+    }
 
     static readonly Vector3[] DIRECTIONS = new Vector3[6]
         {
