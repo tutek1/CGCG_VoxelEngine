@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -13,14 +14,14 @@ public class GenerateWorld : MonoBehaviour
     [Header("Procedural Generation")]
     [SerializeField] private bool _useNoise = true;
     [SerializeField] private int _seed = 13;
-    [SerializeField] private int _octaves = 3;
+    //[SerializeField] private int _octaves = 3;
     [SerializeField] private float _frequency = 20.0f;
     [SerializeField] private float _amplitude = 0.5f;
     [SerializeField] private int _terrainHeight = 10;
     
     [SerializeField] private bool _generate = false;
     
-    //private HashMap<Vector2, Chunk> _chunks = new Dictionary<Vector2, Chunk>();
+    //private Dictionary<Vector2, Chunk> _chunks = new Dictionary<Vector2, Chunk>();
     
     // DEBUG
     void Update()
@@ -56,7 +57,8 @@ public class GenerateWorld : MonoBehaviour
 
                 // Initialize the chunks and create the meshes
                 chunk.Init(_voxelMaterial);
-                chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
+                //chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
+                chunk.GenerateVoxels(_useNoise, _seed, 1, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
                 chunk.GenerateMesh();
             }
         }

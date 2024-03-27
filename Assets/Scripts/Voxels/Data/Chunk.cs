@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -10,7 +11,16 @@ using Random = UnityEngine.Random;
 [RequireComponent(typeof(MeshCollider))]
 public class Chunk : MonoBehaviour
 {
-    private int _voxelsInChunk;
+    private const uint DEFAULT_SIZE = 16;
+
+    //Debug
+    public bool _useNoise;
+    public int _seed;
+    public int _octaves;
+    public float _frequency;
+    public float _amplitude;
+    public int _terrainHeight;
+    public int _voxelsInChunk;
 
     private Dictionary<Vector3, Voxel> voxels = new Dictionary<Vector3, Voxel>();
 
@@ -21,15 +31,17 @@ public class Chunk : MonoBehaviour
 
     // DEBUG
     public Vector3 voxelToAddPos;
-    public bool add;
+    public bool reload;
 
     // DEBUG
     private void Update()
     {
-        if (add)
+        if (reload)
         {
-            add = false;
+            reload = false;
+            voxels.Clear();
             Init(GetComponent<MeshRenderer>().material);
+            GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
             GenerateMesh();
         }
     }
@@ -46,7 +58,15 @@ public class Chunk : MonoBehaviour
     public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequency,
                                float amplitude, int terrainHeight, int voxelsInChunk)
     {
+        _useNoise = useNoise;
+        _seed = seed;
+        _octaves = octaves;
+        _frequency = frequency;
+        _amplitude = amplitude;
+        _terrainHeight = terrainHeight;
         _voxelsInChunk = voxelsInChunk;
+
+        float voxelScale =  (float)DEFAULT_SIZE / _voxelsInChunk;
         
         // Setup seed
         Random.InitState(seed);
@@ -61,42 +81,39 @@ public class Chunk : MonoBehaviour
             for (int voxelZ = 0; voxelZ < _voxelsInChunk; voxelZ++)
             {
                 // Terrain gen but not really working good
-                float height = 1;
+                float height;
+                float noise = 0;
 
-                if (useNoise) {
-                    float tempFrequency = frequency;
-                    float tempAmplitude = amplitude;
-                    for (int octave = 0; octave < octaves; octave++)
+                Vector3 voxelRealPostion = pos + new Vector3(voxelX, 0, voxelZ) * voxelScale;
+                if (_useNoise) {
+                    float tempFrequency = _frequency;
+                    float tempAmplitude = _amplitude;
+                    for (int octave = 0; octave < _octaves; octave++)
                     {
-                        height += (Mathf.PerlinNoise((pos.x + voxelX) / tempFrequency + randomOffset,
-                                                    (pos.z + voxelZ) / tempFrequency + randomOffset) * 2 - 1) * tempAmplitude;
-                        tempFrequency *= frequency;
-                        tempAmplitude *= amplitude;
+                        noise += (Mathf.PerlinNoise(voxelRealPostion.x / tempFrequency + randomOffset,
+                                                     voxelRealPostion.z / tempFrequency + randomOffset) * 2 - 1) * tempAmplitude;
+                        tempFrequency *= _frequency;
+                        tempAmplitude *= _amplitude;
                     }
-                    height *= terrainHeight;
+                    noise = Mathf.Abs(noise);
+                    height = noise * _terrainHeight;
                 }
                 else {
-                    height = Random.value * terrainHeight;
+                    height = Random.value * _terrainHeight;
                 }
 
                 if (height < 1) height = 1;
 
-                for (int voxelY = 0; voxelY < height; voxelY++)
+                int voxelY = 0;
+                float currentRealHeight = 0;
+                while (currentRealHeight < height)
                 {
-                    // Generate a random color for each voxel for now
-                    //Color color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
+                    // Generate a noise color for each voxel for now
                     Color color;
-                    if (useNoise)
-                    {
-                        if (voxelY + 1 > height) color = new Color(0f, 0.2f, 0f);
-                        else                      color = new Color(0.4f, 0.3f, 0f);
-                    }
-                    else
-                    {
-                        color = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f));
-                    }
+                    color = new Color(noise, noise, noise);
                     
-                    voxels[new Vector3(voxelX, voxelY, voxelZ)] = new Voxel() {color=color};
+                    voxels[new Vector3(voxelX, voxelY++, voxelZ)] = new Voxel() {color=color};
+                    currentRealHeight += voxelScale;
                 }
             }                    
         }
@@ -105,6 +122,8 @@ public class Chunk : MonoBehaviour
     public void GenerateMesh()
     {
         _mesh.Clear();
+
+        float voxelScale =  (float)DEFAULT_SIZE / _voxelsInChunk;
 
         Vector3 voxelPos;
         Voxel voxel;
@@ -134,7 +153,7 @@ public class Chunk : MonoBehaviour
                 //Collect the appropriate vertices from the default vertices and add the block position
                 for (int j = 0; j < 4; j++)
                 {
-                    faceVertices[j] = VOXEL_VERTS[VOXEL_VERT_IDXS[i, j]] + voxelPos;
+                    faceVertices[j] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i, j]] + voxelPos) * voxelScale;
                     faceUVs[j] = VOXEL_UVS[j];
                 }
 

@@ -512,12 +512,11 @@ MonoBehaviour:
   _voxelsInChunk: 16
   _voxelScale: 1
   _voxelMaterial: {fileID: 2100000, guid: b61f6e742a10c4e438f5e29af64c1c35, type: 2}
-  _useNoise: 0
+  _useNoise: 1
   _seed: 20
-  _octaves: 4
-  _frequency: 20
-  _amplitude: 0.25
-  _terrainHeight: 2
+  _frequency: 100
+  _amplitude: 1
+  _terrainHeight: 20
   _generate: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
