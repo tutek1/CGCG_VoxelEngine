@@ -508,12 +508,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5724d32e8ee1fcb4a9f794b866336f0b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _diameterOfChunks: 1
-  _voxelsInChunk: 1
+  _diameterOfChunks: 2
+  _voxelsInChunk: 32
   _voxelMaterial: {fileID: 2100000, guid: b61f6e742a10c4e438f5e29af64c1c35, type: 2}
   _useNoise: 1
   _seed: 20
-  _frequency: 100
+  _frequency: 50
   _amplitude: 1
   _terrainHeight: 20
   _generate: 1

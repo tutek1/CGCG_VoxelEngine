@@ -75,15 +75,19 @@ public class GenerateWorld : MonoBehaviour
         Debug.Log("Generation took: " + (Time.realtimeSinceStartup - startTime) + " seconds.");
     }
 
-    public bool IsVoxelInChunkPresent(Vector3 chunkPos, Vector3 voxelPos)
+    public bool IsVoxelInChunkPresentAndNotTop(Chunk callingChunk, Vector3 chunkPos, Vector3 voxelPos)
     {
         if (!_chunks.ContainsKey(chunkPos)) return false;
-        return _chunks[chunkPos].IsVoxelPresent(voxelPos);
-    }
+        
+        Chunk targetChunk = _chunks[chunkPos];
+        // TODO will be fixed by using octatree
+        if (targetChunk._voxelsInChunk > callingChunk._voxelsInChunk) return false;
 
-    public bool IsVoxelInChunkPresentAndNotTop(Vector3 chunkPos, Vector3 voxelPos)
-    {
-        if (!_chunks.ContainsKey(chunkPos)) return false;
-        return _chunks[chunkPos].IsVoxelPresent(voxelPos) && _chunks[chunkPos].IsVoxelPresent(voxelPos + Vector3.up);
+        float scaleCoef = (float)targetChunk._voxelsInChunk/callingChunk._voxelsInChunk;
+        voxelPos.x = (int)(voxelPos.x * scaleCoef);
+        voxelPos.y = (int)(voxelPos.y * scaleCoef);
+        voxelPos.z = (int)(voxelPos.z * scaleCoef);
+
+        return targetChunk.IsVoxelPresent(voxelPos) && targetChunk.IsVoxelPresent(voxelPos + Vector3.up);
     }
 }

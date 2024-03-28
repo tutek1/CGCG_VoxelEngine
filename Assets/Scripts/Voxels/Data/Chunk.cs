@@ -111,7 +111,8 @@ public class Chunk : MonoBehaviour
                 {
                     // Generate a noise color for each voxel for now
                     Color color;
-                    color = new Color(noise, noise, noise);
+                    color = new Color(Random.value, Random.value, Random.value);
+                    //color = new Color(noise, noise, noise);
                     
                     voxels[new Vector3(voxelX, voxelY++, voxelZ)] = new Voxel() {color=color};
                     currentRealHeight += voxelScale;
@@ -162,10 +163,10 @@ public class Chunk : MonoBehaviour
                         voxelPosInOtherChunk.x = voxelPosInOtherChunk.x < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.x % _voxelsInChunk;
                         //voxelPosInOtherChunk.y = voxelPosInOtherChunk.y < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.y % _voxelsInChunk;
                         voxelPosInOtherChunk.z = voxelPosInOtherChunk.z < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.z % _voxelsInChunk;
-                        if (transform.position == new Vector3(-16f, 0f,0f))Debug.Log(transform.position + " chunk is checking, " + voxelPos + " voxPos, " + DIRECTIONS[i] + " dir, " + voxelPosInOtherChunk + " pos in other chunk " + (transform.position + DIRECTIONS[i]*16));
-                        if (_generateWorld.IsVoxelInChunkPresentAndNotTop(transform.position + DIRECTIONS[i]*16, voxelPosInOtherChunk))
+                        //if (transform.position == new Vector3(-16f, 0f,0f))Debug.Log(transform.position + " chunk is checking, " + voxelPos + " voxPos, " + DIRECTIONS[i] + " dir, " + voxelPosInOtherChunk + " pos in other chunk " + (transform.position + DIRECTIONS[i]*16));
+                        if (_generateWorld.IsVoxelInChunkPresentAndNotTop(this, transform.position + DIRECTIONS[i]*16, voxelPosInOtherChunk))
                         {
-                            Debug.Log("SKIP");
+                            //Debug.Log("SKIP");
                             continue;
                         }
                     }
@@ -229,7 +230,6 @@ public class Chunk : MonoBehaviour
 
     public bool IsVoxelPresent(Vector3 index)
     {
-        Debug.Log(voxels.Keys);
         return voxels.ContainsKey(index);
     }
 
