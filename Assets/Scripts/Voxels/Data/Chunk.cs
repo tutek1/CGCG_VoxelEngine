@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.VisualScripting;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -23,7 +24,7 @@ public class Chunk : MonoBehaviour
     public int _voxelsInChunk;
 
     private GenerateWorld _generateWorld;
-    private Dictionary<Vector3, Voxel> voxels = new Dictionary<Vector3, Voxel>();
+    private IndexedArray<Voxel> _voxels;
     private MeshRenderer _meshRenderer;
     private MeshFilter _meshFilter;
     private MeshCollider _meshCollider;
@@ -38,7 +39,6 @@ public class Chunk : MonoBehaviour
         if (reload)
         {
             reload = false;
-            voxels.Clear();
             Init(_generateWorld, GetComponent<MeshRenderer>().material);
             GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
             GenerateMesh();
@@ -67,6 +67,8 @@ public class Chunk : MonoBehaviour
         _voxelsInChunk = voxelsInChunk;
 
         float voxelScale =  (float)DEFAULT_SIZE / _voxelsInChunk;
+
+        if (_voxels == null) _voxels = new IndexedArray<Voxel>(_voxelsInChunk, GenerateWorld.MAX_HEIGHT);
         
         // Setup seed
         Random.InitState(seed);
@@ -103,22 +105,91 @@ public class Chunk : MonoBehaviour
                     height = Random.value * _terrainHeight;
                 }
 
-                if (height < 1) height = 1;
 
                 int voxelY = 0;
                 float currentRealHeight = 0;
-                while (currentRealHeight < height)
+                do
                 {
                     // Generate a noise color for each voxel for now
                     Color color;
                     color = new Color(Random.value, Random.value, Random.value);
                     //color = new Color(noise, noise, noise);
                     
-                    voxels[new Vector3(voxelX, voxelY++, voxelZ)] = new Voxel() {color=color};
+                    _voxels[new Vector3(voxelX, voxelY, voxelZ)] = new Voxel() {position = new Vector3(voxelX, voxelY, voxelZ), color=color};
+                    voxelY++;
                     currentRealHeight += voxelScale;
-                }
+                } while (currentRealHeight < height);
             }                    
         }
+
+        // Set blocked tags for easier mesh generation
+        /*foreach (Voxel voxel in voxels.Values.ToList())
+        {
+            Vector3 position = voxel.position;
+
+            // Up
+            if (!voxels.ContainsKey(position + Vector3.up)) continue;
+            
+            // Down
+            if (position.y != 0 && !voxels.ContainsKey(position + Vector3.down)) continue;
+
+            // Left
+            if (position.x == 0)
+            {
+                Vector3 voxelPosInOtherChunk = position;
+                voxelPosInOtherChunk.x = _voxelsInChunk - 1;
+                // 16 meters per chunk
+                if (!_generateWorld.IsVoxelInChunkPresent(this, transform.position + Vector3.left*16, voxelPosInOtherChunk))
+                {
+                    continue;
+                }
+            }
+            else if (!voxels.ContainsKey(position + Vector3.left)) continue;
+
+            // Right
+            if (position.x == _voxelsInChunk - 1)
+            {
+                Vector3 voxelPosInOtherChunk = position;
+                voxelPosInOtherChunk.x = 0;
+                // 16 meters per chunk
+                if (!_generateWorld.IsVoxelInChunkPresent(this, transform.position + Vector3.right*16, voxelPosInOtherChunk))
+                {
+                    continue;
+                }
+            }
+            else if (!voxels.ContainsKey(position + Vector3.right)) continue;
+
+            // Back
+            if (position.z == 0)
+            {
+                Vector3 voxelPosInOtherChunk = position;
+                voxelPosInOtherChunk.z = _voxelsInChunk - 1;
+                // 16 meters per chunk
+                if (!_generateWorld.IsVoxelInChunkPresent(this, transform.position + Vector3.back*16, voxelPosInOtherChunk))
+                {
+                    continue;
+                }
+            }
+            else if (!voxels.ContainsKey(position + Vector3.back)) continue;
+
+            // Forward
+           if (position.x == _voxelsInChunk - 1)
+            {
+                Vector3 voxelPosInOtherChunk = position;
+                voxelPosInOtherChunk.z = 0;
+                // 16 meters per chunk
+                if (!_generateWorld.IsVoxelInChunkPresent(this, transform.position + Vector3.forward*16, voxelPosInOtherChunk))
+                {
+                    continue;
+                }
+            }
+            else if (!voxels.ContainsKey(position + Vector3.forward)) continue;
+
+
+            Voxel voxelCopy = voxel;
+            voxelCopy.isBlocked = true;
+            voxels[position] = voxelCopy;
+        }*/
     }
 
     public void GenerateMesh()
@@ -139,53 +210,60 @@ public class Chunk : MonoBehaviour
         Vector3[] faceVertices = new Vector3[4];
         Vector2[] faceUVs = new Vector2[4];
         
-        foreach (KeyValuePair<Vector3, Voxel> posVoxelPair in voxels)
+        for (int x = 0; x < _voxels.size.x; x++)
         {
-            voxelPos = posVoxelPair.Key;
-            voxel = posVoxelPair.Value;
-
-            //Iterate over each face direction
-            for (int i = 0; i < 6; i++)
+            for (int y = 0; y <  _voxels.size.y; y++)
             {
-                // Don't draw faces that are hidden
-                Vector3 faceVoxelNeighborPos = voxelPos + DIRECTIONS[i];
-                if (this[faceVoxelNeighborPos] != null)
-                    continue;
-
-                // Check for chunk edges (except for blocks on the top, which need to be have an extra face outwards for holeless LOD transitions)
-                if (voxels.ContainsKey(voxelPos + Vector3.up) &&
-                (voxelPos.x == 0 || voxelPos.x == _voxelsInChunk - 1 || voxelPos.z == 0 || voxelPos.z == _voxelsInChunk - 1))
+                for (int z = 0; z <  _voxels.size.x; z++)
                 {
-                    Vector3 voxelPosInOtherChunk = voxelPos + DIRECTIONS[i];
-                    if (voxelPosInOtherChunk.x == -1 || voxelPosInOtherChunk.x == _voxelsInChunk ||
-                        voxelPosInOtherChunk.z == -1 || voxelPosInOtherChunk.z == _voxelsInChunk)
+                    if (!_voxels.Contains(x, y, z)) continue;
+                    
+                    voxel = _voxels[x, y, z];
+                    voxelPos = voxel.position;
+
+                    if (voxel.isBlocked) continue;
+
+                    //Iterate over each face direction
+                    for (int i = 0; i < 6; i++)
                     {
-                        voxelPosInOtherChunk.x = voxelPosInOtherChunk.x < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.x % _voxelsInChunk;
-                        //voxelPosInOtherChunk.y = voxelPosInOtherChunk.y < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.y % _voxelsInChunk;
-                        voxelPosInOtherChunk.z = voxelPosInOtherChunk.z < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.z % _voxelsInChunk;
-                        //if (transform.position == new Vector3(-16f, 0f,0f))Debug.Log(transform.position + " chunk is checking, " + voxelPos + " voxPos, " + DIRECTIONS[i] + " dir, " + voxelPosInOtherChunk + " pos in other chunk " + (transform.position + DIRECTIONS[i]*16));
-                        if (_generateWorld.IsVoxelInChunkPresentAndNotTop(this, transform.position + DIRECTIONS[i]*16, voxelPosInOtherChunk))
-                        {
-                            //Debug.Log("SKIP");
+                        // Don't draw faces that are hidden
+                        Vector3 faceVoxelNeighborPos = voxelPos + DIRECTIONS[i];
+                        if (this[faceVoxelNeighborPos] != null)
                             continue;
+
+                        // Check for chunk edges (except for blocks on the top, which need to be have an extra face outwards for holeless LOD transitions)
+                        if (_voxels.Contains(voxelPos + Vector3.up) &&
+                        (voxelPos.x == 0 || voxelPos.x == _voxelsInChunk - 1 || voxelPos.z == 0 || voxelPos.z == _voxelsInChunk - 1))
+                        {
+                            Vector3 voxelPosInOtherChunk = voxelPos + DIRECTIONS[i];
+                            if (voxelPosInOtherChunk.x == -1 || voxelPosInOtherChunk.x == _voxelsInChunk ||
+                                voxelPosInOtherChunk.z == -1 || voxelPosInOtherChunk.z == _voxelsInChunk)
+                            {
+                                voxelPosInOtherChunk.x = voxelPosInOtherChunk.x < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.x % _voxelsInChunk;
+                                voxelPosInOtherChunk.z = voxelPosInOtherChunk.z < 0 ? _voxelsInChunk-1 : voxelPosInOtherChunk.z % _voxelsInChunk;
+                                if (_generateWorld.IsVoxelInChunkPresentAndNotTop(this, transform.position + DIRECTIONS[i]*16, voxelPosInOtherChunk))
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        //Collect the appropriate vertices from the default vertices and add the block position
+                        for (int j = 0; j < 4; j++)
+                        {
+                            faceVertices[j] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i, j]] + voxelPos) * voxelScale;
+                            faceUVs[j] = VOXEL_UVS[j];
+                        }
+
+                        for (int j = 0; j < 6; j++)
+                        {
+                            vertices.Add(faceVertices[VOXEL_TRIS[i, j]]);
+                            colors.Add(voxel.color);
+                            uvs.Add(faceUVs[VOXEL_TRIS[i, j]]);
+                            faces.Add(counter);
+                            counter++;
                         }
                     }
-                }
-
-                //Collect the appropriate vertices from the default vertices and add the block position
-                for (int j = 0; j < 4; j++)
-                {
-                    faceVertices[j] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i, j]] + voxelPos) * voxelScale;
-                    faceUVs[j] = VOXEL_UVS[j];
-                }
-
-                for (int j = 0; j < 6; j++)
-                {
-                    vertices.Add(faceVertices[VOXEL_TRIS[i, j]]);
-                    colors.Add(voxel.color);
-                    uvs.Add(faceUVs[VOXEL_TRIS[i, j]]);
-                    faces.Add(counter);
-                    counter++;
                 }
             }
         }
@@ -209,8 +287,8 @@ public class Chunk : MonoBehaviour
     {
         get
         {
-            if (voxels.ContainsKey(index))
-                return voxels[index];
+            if (_voxels.Contains(index))
+                return _voxels[index];
             else
                 return null;
         }
@@ -219,18 +297,13 @@ public class Chunk : MonoBehaviour
         {
             if (value == null) return;
 
-            if (voxels.ContainsKey(index))
-                voxels[index] = (Voxel)value;
-            else
-            {
-                voxels.Add(index, (Voxel)value);
-            }
+            _voxels[index] = (Voxel)value;
         }
     }
 
     public bool IsVoxelPresent(Vector3 index)
     {
-        return voxels.ContainsKey(index);
+        return _voxels.Contains(index);
     }
 
     static readonly Vector3[] DIRECTIONS = new Vector3[6]

@@ -5,6 +5,8 @@ using Random = UnityEngine.Random;
 
 public class GenerateWorld : MonoBehaviour
 {
+    public const int MAX_HEIGHT = 256;
+
     private const uint DEFAULT_SIZE = 16;
 
     [SerializeField] private int _diameterOfChunks = 1;
@@ -67,6 +69,9 @@ public class GenerateWorld : MonoBehaviour
             }
         }
 
+        Debug.Log("Voxel generation took: " + (Time.realtimeSinceStartup - startTime) + " seconds.");
+        startTime = Time.realtimeSinceStartup;
+
         foreach (Chunk savedChunk in _chunks.Values)
         {
             savedChunk.GenerateMesh();
@@ -89,5 +94,21 @@ public class GenerateWorld : MonoBehaviour
         voxelPos.z = (int)(voxelPos.z * scaleCoef);
 
         return targetChunk.IsVoxelPresent(voxelPos) && targetChunk.IsVoxelPresent(voxelPos + Vector3.up);
+    }
+
+        public bool IsVoxelInChunkPresent(Chunk callingChunk, Vector3 chunkPos, Vector3 voxelPos)
+    {
+        if (!_chunks.ContainsKey(chunkPos)) return false;
+        
+        Chunk targetChunk = _chunks[chunkPos];
+        // TODO will be fixed by using octatree
+        if (targetChunk._voxelsInChunk > callingChunk._voxelsInChunk) return false;
+
+        float scaleCoef = (float)targetChunk._voxelsInChunk/callingChunk._voxelsInChunk;
+        voxelPos.x = (int)(voxelPos.x * scaleCoef);
+        voxelPos.y = (int)(voxelPos.y * scaleCoef);
+        voxelPos.z = (int)(voxelPos.z * scaleCoef);
+
+        return targetChunk.IsVoxelPresent(voxelPos);
     }
 }

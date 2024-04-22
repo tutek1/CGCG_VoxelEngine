@@ -4,5 +4,7 @@ using UnityEngine;
 
 public struct Voxel
 {
+    public Vector3 position;
     public Color color;
+    public bool isBlocked;
 }
