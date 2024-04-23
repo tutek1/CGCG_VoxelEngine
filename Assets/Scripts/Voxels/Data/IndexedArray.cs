@@ -114,7 +114,6 @@ public class IndexedArray<T> where T : struct
             y < 0 || y > size.y ||
             z < 0 || z > size.x)
             {
-                Debug.LogError($"Coordinates out of bounds! {x}, {y}, {z}");
                 return default(T);
             }
             return array[IndexFromCoord(x, y, z)];
@@ -125,7 +124,6 @@ public class IndexedArray<T> where T : struct
             y < 0 || y >= size.y ||
             z < 0 || z >= size.x)
             {
-                Debug.LogError($"Coordinates out of bounds! {x},{y},{z}");
                 return;
             }
             array[IndexFromCoord(x, y, z)] = value;

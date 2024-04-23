@@ -1,25 +1,30 @@
 using System;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 public class GenerateWorld : MonoBehaviour
 {
-    public const int MAX_HEIGHT = 256;
+    public const int MAX_HEIGHT = 100;
 
-    private const uint DEFAULT_SIZE = 16;
+    public const int VOXELS_IN_CHUNK = 4;
 
+    [Header("Chunks")]
     [SerializeField] private int _diameterOfChunks = 1;
-    [SerializeField] private int _voxelsInChunk = 16;
+    [SerializeField] private float _chunkSize = 16;
     [SerializeField] private Material _voxelMaterial;
+    [SerializeField] private ComputeShader _computerShader;
 
     [Space]
     [Header("Procedural Generation")]
     [SerializeField] private bool _useNoise = true;
     [SerializeField] private int _seed = 13;
-    //[SerializeField] private int _octaves = 3;
-    [SerializeField] private float _frequency = 20.0f;
-    [SerializeField] private float _amplitude = 0.5f;
+    [SerializeField] private int _octaves = 5;
+    [SerializeField] private float _frequencyDiff = 2.0f;
+    [SerializeField] private float _amplitudeDiff = 0.5f;
+    [SerializeField] private float _scale = 5f;
+
     [SerializeField] private int _terrainHeight = 10;
     
     [SerializeField] private bool _generate = false;
@@ -44,7 +49,7 @@ public class GenerateWorld : MonoBehaviour
             Destroy(transform.GetChild(i).gameObject);
         }
         
-        float voxelScale = (float)DEFAULT_SIZE / _voxelsInChunk;
+        float voxelScale = (float)_chunkSize / VOXELS_IN_CHUNK;
 
         // Start tracking time to test performance
         double startTime = Time.realtimeSinceStartup;
@@ -56,14 +61,13 @@ public class GenerateWorld : MonoBehaviour
             {
                 // Set name, position, scale and parent
                 Chunk chunk = new GameObject("Chunk[" + x +"," + z + "]").AddComponent<Chunk>();
-                Vector3 chunkPosition = new Vector3(x * _voxelsInChunk * voxelScale, 0, z * _voxelsInChunk * voxelScale);
+                Vector3 chunkPosition = new Vector3(x * _chunkSize, 0, z * _chunkSize);
                 chunk.transform.position = chunkPosition;
                 chunk.transform.SetParent(transform);
 
                 // Initialize the chunks and create the meshes
-                chunk.Init(this, _voxelMaterial);
-                //chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
-                chunk.GenerateVoxels(_useNoise, _seed, 1, _frequency, _amplitude, _terrainHeight, _voxelsInChunk);
+                chunk.Init(this, _voxelMaterial, _computerShader);
+                chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkSize);
 
                 _chunks.Add(chunkPosition, chunk);
             }
@@ -77,38 +81,11 @@ public class GenerateWorld : MonoBehaviour
             savedChunk.GenerateMesh();
         }
 
-        Debug.Log("Generation took: " + (Time.realtimeSinceStartup - startTime) + " seconds.");
+        Debug.Log("Generation took without async: " + (Time.realtimeSinceStartup - startTime) + " seconds.");
     }
 
-    public bool IsVoxelInChunkPresentAndNotTop(Chunk callingChunk, Vector3 chunkPos, Vector3 voxelPos)
+    public Chunk GetChunk(Vector3 pos)
     {
-        if (!_chunks.ContainsKey(chunkPos)) return false;
-        
-        Chunk targetChunk = _chunks[chunkPos];
-        // TODO will be fixed by using octatree
-        if (targetChunk._voxelsInChunk > callingChunk._voxelsInChunk) return false;
-
-        float scaleCoef = (float)targetChunk._voxelsInChunk/callingChunk._voxelsInChunk;
-        voxelPos.x = (int)(voxelPos.x * scaleCoef);
-        voxelPos.y = (int)(voxelPos.y * scaleCoef);
-        voxelPos.z = (int)(voxelPos.z * scaleCoef);
-
-        return targetChunk.IsVoxelPresent(voxelPos) && targetChunk.IsVoxelPresent(voxelPos + Vector3.up);
-    }
-
-        public bool IsVoxelInChunkPresent(Chunk callingChunk, Vector3 chunkPos, Vector3 voxelPos)
-    {
-        if (!_chunks.ContainsKey(chunkPos)) return false;
-        
-        Chunk targetChunk = _chunks[chunkPos];
-        // TODO will be fixed by using octatree
-        if (targetChunk._voxelsInChunk > callingChunk._voxelsInChunk) return false;
-
-        float scaleCoef = (float)targetChunk._voxelsInChunk/callingChunk._voxelsInChunk;
-        voxelPos.x = (int)(voxelPos.x * scaleCoef);
-        voxelPos.y = (int)(voxelPos.y * scaleCoef);
-        voxelPos.z = (int)(voxelPos.z * scaleCoef);
-
-        return targetChunk.IsVoxelPresent(voxelPos);
+        return _chunks.ContainsKey(pos) ? _chunks[pos] : null;
     }
 }
