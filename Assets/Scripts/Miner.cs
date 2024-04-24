@@ -19,7 +19,7 @@ public class Miner : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (Input.GetMouseButton(0))
+        if (Input.GetMouseButtonDown(0))
         {
             RaycastHit hit;
             Ray ray = GetComponent<Camera>().ScreenPointToRay(Input.mousePosition);
@@ -30,12 +30,12 @@ public class Miner : MonoBehaviour
                 if (chunk != null)
                 {
                     pos = hit.point;
-                    chunk.DestroyVoxel(hit.point, area);
+                    chunk.DestroyVoxel(hit.point, hit.normal, area);
                 }
             }
         }
 
-        if (Input.GetMouseButton(1))
+        if (Input.GetMouseButtonDown(1))
         {
             RaycastHit hit;
             Ray ray = GetComponent<Camera>().ScreenPointToRay(Input.mousePosition);
@@ -46,7 +46,7 @@ public class Miner : MonoBehaviour
                 if (chunk != null)
                 {
                     pos = hit.point;
-                    chunk.CreateVoxel(hit.point, area);
+                    chunk.CreateVoxel(hit.point, hit.normal, area);
                 }
             }
         }

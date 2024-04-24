@@ -157,7 +157,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _flying: 1
-  _speed: 5
+  _speed: 10
   _jumpSpeed: 400
   _sensitivity: 1
   _minX: -80
@@ -477,7 +477,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 73782775481c54f47bab3a07038e4bd5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  area: 1
+  area: 0
 --- !u!1 &1119473542
 GameObject:
   m_ObjectHideFlags: 0
@@ -522,18 +522,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5724d32e8ee1fcb4a9f794b866336f0b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _diameterOfChunks: 5
-  _chunkSize: 0.25
+  _diameterOfChunks: 3
+  _voxelsInChunk: 16
   _voxelMaterial: {fileID: 2100000, guid: b61f6e742a10c4e438f5e29af64c1c35, type: 2}
   _computerShader: {fileID: 7200000, guid: 2a6a7c23a6cdb184b9e85e4103099ca0, type: 3}
   _useNoise: 1
-  _seed: 20
-  _octaves: 5
+  _seed: 13
+  _octaves: 4
   _frequencyDiff: 2
-  _amplitudeDiff: 0.5
-  _scale: 30
-  _terrainHeight: 20
-  _generate: 1
+  _amplitudeDiff: 0.4
+  _scale: 200
+  _terrainHeight: 40
+  _generate: 0
+  _playerTransform: {fileID: 112315320}
+  _viewDistance: 8
+  _maxDetailDistance: 5
+  _minDetail: 4
+  _LODingOffset: 3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -14,9 +14,6 @@ using Random = UnityEngine.Random;
 [RequireComponent(typeof(MeshCollider))]
 public class Chunk : MonoBehaviour
 {
-    private Vector2 _chunkIdx;
-
-
     //Debug public to be private
     public bool _useNoise;
     public int _seed;
@@ -25,21 +22,33 @@ public class Chunk : MonoBehaviour
     public float _amplitudeDiff;
     public float _scale;
     public int _terrainHeight;
-    public float _chunkSize;
+    
+    private float _voxelScale;
 
     private GenerateWorld _generateWorld;
-    private IndexedArray<Voxel> _voxels;
+    private VoxelArray _voxels;
     private MeshRenderer _meshRenderer;
     private MeshFilter _meshFilter;
     private MeshCollider _meshCollider;
     private Mesh _mesh;
     private ComputeShader _computeShaderMeshGen;
+    public Vector3Int _chunkBounds;
+
 
     // DEBUG button for reload of chunk
     public bool reload;
 
     private bool _isGenerationRunning = false;
     private bool _regenerateMeshNextFrame = false;
+
+    private ComputeBuffer _voxelsBuffer;
+    private GraphicsBuffer _verticesBuffer;
+    private GraphicsBuffer _colorsBuffer;
+    private GraphicsBuffer _uvsBuffer;
+    private GraphicsBuffer _normalsBuffer;
+    private GraphicsBuffer _facesBuffer;
+    private ComputeBuffer _counterBuffer;
+
 
     // DEBUG
     private void FixedUpdate()
@@ -48,7 +57,7 @@ public class Chunk : MonoBehaviour
         {
             reload = false;
             Init(_generateWorld, GetComponent<MeshRenderer>().material, _computeShaderMeshGen);
-            GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkSize);
+            GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkBounds.x);
             GenerateMesh();
         }
 
@@ -68,12 +77,11 @@ public class Chunk : MonoBehaviour
         _mesh = _meshFilter.mesh;
         _meshRenderer.material = voxelMaterial;
         _generateWorld = generateWorld;
-        _chunkIdx = new Vector2((int)(transform.position.x / _chunkSize), (int)(transform.position.z / _chunkSize));
     }
 
     public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequencyDiff,
                                float amplitudeDiff, float scale,
-                               int terrainHeight, float chunkSize)
+                               int terrainHeight, int voxelsInChunk)
     {
         _useNoise = useNoise;
         _seed = seed;
@@ -82,31 +90,30 @@ public class Chunk : MonoBehaviour
         _amplitudeDiff = amplitudeDiff;
         _scale = scale;
         _terrainHeight = terrainHeight;
-        _chunkSize = chunkSize;
 
-        float voxelScale = (float)_chunkSize / GenerateWorld.VOXELS_IN_CHUNK;
-
-        _voxels = new IndexedArray<Voxel>(GenerateWorld.VOXELS_IN_CHUNK, GenerateWorld.MAX_HEIGHT);
+        _voxelScale = (float)GenerateWorld.CHUNK_SIZE / voxelsInChunk;
+        _chunkBounds = new Vector3Int(voxelsInChunk, Mathf.CeilToInt(GenerateWorld.MAX_HEIGHT / _voxelScale), voxelsInChunk);
+        _voxels = new VoxelArray(_chunkBounds.x, _chunkBounds.y);
 
         // Setup seed
         Random.InitState(seed);
-        float randomOffset = Random.value * 100000f;
+        float randomOffset = Random.value * 59645.78456f;
 
         // Cache position
-        Vector3 pos = transform.position;
+        Vector3 chunkPos = transform.position;
 
 
         // Generate all voxels and add them to a chunk
-        for (int voxelX = 0; voxelX < GenerateWorld.VOXELS_IN_CHUNK; voxelX++)
+        for (int voxelX = 0; voxelX < _chunkBounds.x; voxelX++)
         {
-            for (int voxelZ = 0; voxelZ < GenerateWorld.VOXELS_IN_CHUNK; voxelZ++)
+            for (int voxelZ = 0; voxelZ < _chunkBounds.x; voxelZ++)
             {
                 // Terrain gen but not really working good
                 float height;
                 float noise = 0;
                 float maxPossibleNoise = 0;
 
-                Vector3 voxelRealPostion = pos + new Vector3(voxelX, 0, voxelZ) * voxelScale;
+                Vector3 voxelRealPostion = chunkPos + new Vector3(voxelX, 0, voxelZ) * _voxelScale;
                 if (_useNoise) {
                     float frequency = 1;
                     float amplitude = 1;
@@ -142,7 +149,7 @@ public class Chunk : MonoBehaviour
                     _voxels[new Vector3(voxelX, voxelY, voxelZ)] 
                         = new Voxel() {position = new Vector3(voxelX, voxelY, voxelZ), color=color, ID = 1};
                     voxelY++;
-                    currentRealHeight += voxelScale;
+                    currentRealHeight += _voxelScale;
                 } while (currentRealHeight < height);
             }                    
         }
@@ -154,70 +161,65 @@ public class Chunk : MonoBehaviour
         float startTime = Time.realtimeSinceStartup;
 
         // Create buffers
-        float voxelScale =  (float)_chunkSize / GenerateWorld.VOXELS_IN_CHUNK;
         int intsize = sizeof(int);
         int vector2size = sizeof(float) * 2;
         int vector3size = sizeof(float) * 3;
         int vector4size = sizeof(float) * 4;
-        ComputeBuffer voxelsBuffer = new ComputeBuffer(_voxels.Count, vector3size + vector4size + intsize);
-        voxelsBuffer.SetData(_voxels.GetData);
+        _voxelsBuffer = new ComputeBuffer(_voxels.Capacity, vector3size + vector4size + intsize);
+        _voxelsBuffer.SetData(_voxels.GetData);
 
-        int numVerts = _voxels.Capacity * 24;
-        Vector3[] vertices = new Vector3[numVerts];
-        GraphicsBuffer verticesBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector3size);
-        Color[] colors = new Color[numVerts];
-        GraphicsBuffer colorsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector4size);
-        Vector2[] uvs = new Vector2[numVerts];
-        GraphicsBuffer uvsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector2size);
-        Vector3[] normals = new Vector3[numVerts];
-        GraphicsBuffer normalsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector3size);
-        int[] faces = new int[_voxels.Capacity * 36];
-        GraphicsBuffer facesBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, faces.Length, intsize);
+        // Initialiaze buffers
+        int numVerts = _voxels.Count * 24;
+        _verticesBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector3size);
+        _colorsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector4size);
+        _uvsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector2size);
+        _normalsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVerts, vector3size);
+        _facesBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _voxels.Count * 36, intsize);
         int[] counters = new int[2];
-        GraphicsBuffer counterBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 2, intsize);
-        counterBuffer.SetData(counters);
-
-        //Debug.Log("After buffer creation " + (Time.realtimeSinceStartup - startTime));
-        //startTime = Time.realtimeSinceStartup;
+        _counterBuffer = new ComputeBuffer(2, intsize);
+        _counterBuffer.SetData(counters);
 
         // Set buffers
         int shaderID = _computeShaderMeshGen.FindKernel("CSMain");
-        _computeShaderMeshGen.SetBuffer(shaderID, "voxels", voxelsBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "vertices", verticesBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "colors" , colorsBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "uvs", uvsBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "normals", normalsBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "faces", facesBuffer);
-        _computeShaderMeshGen.SetBuffer(shaderID, "counters", counterBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "voxels", _voxelsBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "vertices", _verticesBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "colors" , _colorsBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "uvs", _uvsBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "normals", _normalsBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "faces", _facesBuffer);
+        _computeShaderMeshGen.SetBuffer(shaderID, "counters", _counterBuffer);
 
-        _computeShaderMeshGen.SetVector("size", (Vector2)_voxels.size);
-        _computeShaderMeshGen.SetFloat("voxel_scale", voxelScale);
+        _computeShaderMeshGen.SetVector("voxels_size", (Vector2)_voxels.size);
+        _computeShaderMeshGen.SetFloat("voxel_scale", _voxelScale);
         _computeShaderMeshGen.SetInt("voxel_count", _voxels.Capacity);
-
-        //Debug.Log("After set " + (Time.realtimeSinceStartup - startTime));
-        //startTime = Time.realtimeSinceStartup;
 
         // Dispatch compute shader
         _computeShaderMeshGen.GetKernelThreadGroupSizes(shaderID, out uint groupSizeX, out _, out _);
         int dispatchSize = Mathf.CeilToInt((float)_voxels.Capacity / groupSizeX);
         _computeShaderMeshGen.Dispatch(shaderID, dispatchSize, 1, 1);
 
-        //Debug.Log("After dispatch " + (Time.realtimeSinceStartup - startTime));
-        //startTime = Time.realtimeSinceStartup;
 
-        AsyncGPUReadback.Request(verticesBuffer, request =>
+        AsyncGPUReadback.Request(_verticesBuffer, request =>
         {
+            // Chunk was deleted
+            if (_meshFilter == null)
+            {
+                DisposeBuffers();
+                return;
+            }
 
             // Get data from shader
-            verticesBuffer.GetData(vertices);
-            colorsBuffer.GetData(colors);
-            uvsBuffer.GetData(uvs);
-            normalsBuffer.GetData(normals);
-            facesBuffer.GetData(faces);
-            counterBuffer.GetData(counters);
-
-            // Get only valid faces
-            //faces = faces.Where(val => val != 0).ToArray();
+            _counterBuffer.GetData(counters);
+            Vector3[] vertices = new Vector3[counters[0]];
+            Color[] colors = new Color[counters[0]];
+            Vector2[] uvs = new Vector2[counters[0]];
+            Vector3[] normals = new Vector3[counters[0]];
+            int[] faces = new int[counters[1]];
+            _verticesBuffer.GetData(vertices);
+            _colorsBuffer.GetData(colors);
+            _uvsBuffer.GetData(uvs);
+            _normalsBuffer.GetData(normals);
+            _facesBuffer.GetData(faces);
 
             // Set all mesh data
             _mesh = new Mesh();
@@ -232,33 +234,38 @@ public class Chunk : MonoBehaviour
             _mesh.UploadMeshData(true);
             _meshFilter.mesh = _mesh;
             _meshCollider.sharedMesh = _mesh;
-            _isGenerationRunning = false;
-
-            //Debug.Log("After mesh update " + (Time.realtimeSinceStartup - startTime));
-            //startTime = Time.realtimeSinceStartup;
 
             // Release the allocated data
-            voxelsBuffer.Dispose();
-            voxelsBuffer.Release();
-            verticesBuffer.Dispose();
-            verticesBuffer.Release();
-            colorsBuffer.Dispose();
-            colorsBuffer.Release();
-            uvsBuffer.Dispose();
-            uvsBuffer.Release();
-            normalsBuffer.Dispose();
-            normalsBuffer.Release();
-            facesBuffer.Dispose();
-            facesBuffer.Release();
+            DisposeBuffers();
+            _isGenerationRunning = false;
         });
     }
 
-    public void DestroyVoxel(Vector3 pos, int area)
+    private void DisposeBuffers()
+    {
+        _voxelsBuffer?.Dispose();
+        _verticesBuffer?.Dispose();
+        _colorsBuffer?.Dispose();
+        _uvsBuffer?.Dispose();
+        _normalsBuffer?.Dispose();
+        _facesBuffer?.Dispose();
+        _counterBuffer?.Dispose();
+    }
+
+    private void OnApplicationQuit()
+    {
+        DisposeBuffers();
+    }
+
+    public void DestroyVoxel(Vector3 pos, Vector3 normal, int area)
     { 
         pos -= transform.position;
-        float voxelX = (int)((pos.x / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
-        float voxelY = (int)((pos.y / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
-        float voxelZ = (int)((pos.z / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
+        pos -= Vector3.one * _voxelScale * 0.5f;
+        pos -= normal * _voxelScale * 0.5f;
+        float voxelX = Mathf.RoundToInt((pos.x / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelY = Mathf.RoundToInt((pos.y / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelZ = Mathf.RoundToInt((pos.z / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        Vector3 voxelPos = new Vector3(voxelX, voxelY, voxelZ);
 
         for (float x = -area; x <= area; x++)
         {
@@ -267,47 +274,47 @@ public class Chunk : MonoBehaviour
                 for (float z = -area; z <= area; z ++)
                 {
                     Vector3 offset = new Vector3(x,y,z);
-                    if (offset.magnitude > area + 0.5f) continue;
+                    if (offset.magnitude > area + 0.25f) continue;
 
-                    Vector3 newPos = new Vector3(voxelX + x, voxelY + y, voxelZ + z);
+                    Vector3 newPos = voxelPos + offset;
                     if (newPos.x < 0)
                     {
-                        newPos.x += GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * _chunkSize);
+                        newPos.x += _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.x >= GenerateWorld.VOXELS_IN_CHUNK)
+                    if (newPos.x >= _chunkBounds.x)
                     {
-                        newPos.x -= GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * _chunkSize);
+                        newPos.x -= _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.y < 0 || newPos.y >= GenerateWorld.MAX_HEIGHT)
+                    if (newPos.y < 0 || newPos.y >= _chunkBounds.y)
                     {
                         continue;
                     }
                     if (newPos.z < 0)
                     {
-                        newPos.z += GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * _chunkSize);
+                        newPos.z += _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.z >= GenerateWorld.VOXELS_IN_CHUNK)
+                    if (newPos.z >= _chunkBounds.x)
                     {
-                        newPos.z -= GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * _chunkSize);
+                        newPos.z -= _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
@@ -326,12 +333,15 @@ public class Chunk : MonoBehaviour
         }
     }
 
-    public void CreateVoxel(Vector3 pos, int area)
+    public void CreateVoxel(Vector3 pos, Vector3 normal, int area)
     { 
         pos -= transform.position;
-        float voxelX = (int)((pos.x / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
-        float voxelY = (int)((pos.y / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
-        float voxelZ = (int)((pos.z / _chunkSize) * GenerateWorld.VOXELS_IN_CHUNK);
+        pos -= Vector3.one * _voxelScale * 0.5f;
+        pos += normal * _voxelScale * 0.5f;
+        float voxelX = Mathf.RoundToInt((pos.x / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelY = Mathf.RoundToInt((pos.y / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelZ = Mathf.RoundToInt((pos.z / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        Vector3 voxelPos = new Vector3(voxelX, voxelY, voxelZ);
 
         for (float x = -area; x <= area; x++)
         {
@@ -340,47 +350,47 @@ public class Chunk : MonoBehaviour
                 for (float z = -area; z <= area; z ++)
                 {
                     Vector3 offset = new Vector3(x,y,z);
-                    if (offset.magnitude > area + 0.5f) continue;
+                    if (offset.magnitude > area + 0.25f) continue;
 
-                    Vector3 newPos = new Vector3(voxelX + x, voxelY + y, voxelZ + z);
+                    Vector3 newPos = voxelPos + offset;
                     if (newPos.x < 0)
                     {
-                        newPos.x += GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * _chunkSize);
+                        newPos.x += _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.x >= GenerateWorld.VOXELS_IN_CHUNK)
+                    if (newPos.x >= _chunkBounds.x)
                     {
-                        newPos.x -= GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * _chunkSize);
+                        newPos.x -= _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.y < 0 || newPos.y >= GenerateWorld.MAX_HEIGHT)
+                    if (newPos.y < 0 || newPos.y >= _chunkBounds.y)
                     {
                         continue;
                     }
                     if (newPos.z < 0)
                     {
-                        newPos.z += GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * _chunkSize);
+                        newPos.z += _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
                         }
                         continue;
                     }
-                    if (newPos.z >= GenerateWorld.VOXELS_IN_CHUNK)
+                    if (newPos.z >= _chunkBounds.x)
                     {
-                        newPos.z -= GenerateWorld.VOXELS_IN_CHUNK;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * _chunkSize);
+                        newPos.z -= _chunkBounds.x;
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * GenerateWorld.CHUNK_SIZE);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
@@ -426,21 +436,16 @@ public class Chunk : MonoBehaviour
         _regenerateMeshNextFrame = true;
     }
 
-    public Voxel? this[Vector3 index]
-    {
-        get
-        {
-            if (_voxels.Contains(index))
-                return _voxels[index];
-            else
-                return null;
-        }
+    // public Voxel this[Vector3 index]
+    // {
+    //     get
+    //     {
+    //         return _voxels[index];
+    //     }
 
-        set
-        {
-            if (value == null) return;
-
-            _voxels[index] = (Voxel)value;
-        }
-    }
+    //     set
+    //     {
+    //         _voxels[index] = (Voxel)value;
+    //     }
+    // }
 }

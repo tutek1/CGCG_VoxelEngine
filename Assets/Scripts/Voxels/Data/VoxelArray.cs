@@ -7,13 +7,13 @@ using UnityEngine;
 // Taken from https://github.com/pixelreyn/VoxelProjectSeries
 
 [System.Serializable]
-public class IndexedArray<T> where T : struct
+public class VoxelArray
 {
     private bool initialized = false;
 
     [SerializeField]
     [HideInInspector]
-    public T[] array;
+    public Voxel[] array;
 
     [SerializeField]
     [HideInInspector]
@@ -24,11 +24,14 @@ public class IndexedArray<T> where T : struct
     }
 
     private Vector2Int _size;
+    private int _count = 0;
+    private int _capacity = 0;
     
-    public IndexedArray(int sizeX, int sizeY)
+    public VoxelArray(int sizeX, int sizeY)
     {
-        size = new Vector2Int(sizeX + 3, sizeY + 1);
-        array = new T[Capacity];
+        _size = new Vector2Int(sizeX, sizeY);
+        _capacity = size.x * size.y * size.x;
+        array = new Voxel[_capacity];
         initialized = true;
     }
 
@@ -47,24 +50,24 @@ public class IndexedArray<T> where T : struct
     {
         if (!initialized)
             return;
-
+        _count = 0;
         for (int x = 0; x < size.x; x++)
             for (int y = 0; y < size.y; y++)
                 for (int z = 0; z < size.x; z++)
-                    array[x + (y * size.x) + (z * size.x * size.y)] = default(T);
+                    array[x + (y * size.x) + (z * size.x * size.y)] = new Voxel();
     }
 
     public int Capacity
     {
-        get { return size.x * size.y * size.x; }
+        get { return _capacity; }
     }
 
     public int Count
     {
-        get { return size.x * size.y * size.x; }
+        get { return _count; }
     }
 
-    public T[] GetData
+    public Voxel[] GetData
     {
         get
         {
@@ -72,17 +75,17 @@ public class IndexedArray<T> where T : struct
         }
     }
 
-    public bool Contains(Vector3 coord)
+    public bool IsVoxelValid(Vector3 coord)
     {
-        return !EqualityComparer<T>.Default.Equals(this[coord], default(T));
+        return this[coord].ID != 0;
     }
 
-    public bool Contains(float x, float y, float z)
+    public bool IsVoxelValid(float x, float y, float z)
     {
-        return !EqualityComparer<T>.Default.Equals(this[x,y,z], default(T));
+        return this[x,y,z].ID != 0;
     }
 
-    public T this[Vector3 coord]
+    public Voxel this[Vector3 coord]
     {
         get
         {
@@ -90,9 +93,11 @@ public class IndexedArray<T> where T : struct
             coord.y < 0 || coord.y > size.y ||
             coord.z < 0 || coord.z > size.x)
             {
-                return default(T);
+                return new Voxel();
             }
-            return array[IndexFromCoord(coord)];
+            int idx = IndexFromCoord(coord);
+            if (idx >= _capacity) return new Voxel();
+            return array[idx];
         }
         set
         {
@@ -102,11 +107,23 @@ public class IndexedArray<T> where T : struct
             {
                 return;
             }
-            array[IndexFromCoord(coord)] = value;
+
+            if (IsVoxelValid(coord))
+            {
+                if (value.ID == 0) _count -= 1;
+            }
+            else if (value.ID != 0)
+            {
+                _count += 1;
+            }
+            int idx = IndexFromCoord(coord);
+            if (idx >= _capacity) return;
+
+            array[idx] = value;
         }
     }
 
-    public T this[float x, float y, float z]
+    public Voxel this[float x, float y, float z]
     {
         get
         {
@@ -114,9 +131,11 @@ public class IndexedArray<T> where T : struct
             y < 0 || y > size.y ||
             z < 0 || z > size.x)
             {
-                return default(T);
+                return new Voxel();
             }
-            return array[IndexFromCoord(x, y, z)];
+            int idx = IndexFromCoord(x,y,z);
+            if (idx >= _capacity) return new Voxel();
+            return array[idx];
         }
         set
         {
@@ -126,7 +145,18 @@ public class IndexedArray<T> where T : struct
             {
                 return;
             }
-            array[IndexFromCoord(x, y, z)] = value;
+            if (IsVoxelValid(x, y, z))
+            {
+                if (value.ID == 0) _count -= 1;
+            }
+            else if (value.ID != 0)
+            {
+                _count += 1;
+            }
+            int idx = IndexFromCoord(x, y, z);
+            if (idx >= _capacity) return;
+
+            array[idx] = value;
         }
     }
 

@@ -79,7 +79,7 @@ static const float3 VOXEL_NORMS[6] =
 
 // INPUT
 int voxel_count;
-float2 size;
+float2 voxels_size;
 float voxel_scale;
 StructuredBuffer<Voxel> voxels;
 
@@ -93,10 +93,10 @@ RWStructuredBuffer<int> counters;
 
 int IndexFromCoord(float3 idx)
 {
-    return round(idx.x) + round(idx.y) * size.x + round(idx.z) * size.x * size.y;
+    return round(idx.x) + round(idx.y) * voxels_size.x + round(idx.z) * voxels_size.x * voxels_size.y;
 }
 
-[numthreads(16, 1, 1)]
+[numthreads(128, 1, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     int idx = id.x;
@@ -111,11 +111,18 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     // each face
     for (uint i = 0; i < 6; i++)
     {
-        int neighbor_idx = IndexFromCoord(voxel.pos + DIRECTIONS[i]);
-        if (neighbor_idx < voxel_count && voxels[neighbor_idx].ID != 0)
-        {
-            continue;
-        }
+        float3 neighbor_pos = voxel.pos + DIRECTIONS[i];
+        if (neighbor_pos.x >= 0 && neighbor_pos.x < voxels_size.x
+            && neighbor_pos.z >= 0 && neighbor_pos.z < voxels_size.x
+            && neighbor_pos.y >= 0 && neighbor_pos.y < voxels_size.y)
+            {
+                int neighbor_idx = IndexFromCoord(neighbor_pos);
+                if (neighbor_idx < voxel_count && voxels[neighbor_idx].ID != 0)
+                {
+                    continue;
+                }
+            }
+        
 
         InterlockedAdd(counters[0], 4, vert_count);
         InterlockedAdd(counters[1], 6, face_count);
