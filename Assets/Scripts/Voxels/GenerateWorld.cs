@@ -12,7 +12,6 @@ public class GenerateWorld : MonoBehaviour
     public const int CHUNK_SIZE = 16;
 
     [Header("Chunks")]
-    [SerializeField] private int _diameterOfChunks = 3;
     [SerializeField] private int _voxelsInChunk = 32;
     [SerializeField] private Material _voxelMaterial;
     [SerializeField] private ComputeShader _computerShader;
@@ -61,20 +60,6 @@ public class GenerateWorld : MonoBehaviour
         {
             Destroy(transform.GetChild(i).gameObject);
         }
-        
-        // Start tracking time to test performance
-        double startTime = Time.realtimeSinceStartup;
-        
-        // Create chunks in the -diameter to +diameter square radius
-        for (int x = -_diameterOfChunks; x < _diameterOfChunks; x++)
-        {
-            for (int z = -_diameterOfChunks; z < _diameterOfChunks; z++)
-            {
-                GenerateChunk(x, z);
-            }
-        }
-
-        Debug.Log("Generation took without async: " + (Time.realtimeSinceStartup - startTime) + " seconds.");
     }
 
     private void GenerateChunk(int x, int z)
