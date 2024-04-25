@@ -184,8 +184,9 @@ public class Chunk : MonoBehaviour
 
     public void GenerateMesh()
     {
+        if (_voxels.Count < 1) return;
+
         _isGenerationRunning = true;
-        float startTime = Time.realtimeSinceStartup;
 
         // Create buffers
         int intsize = sizeof(int);
@@ -224,7 +225,6 @@ public class Chunk : MonoBehaviour
         _computeShaderMeshGen.GetKernelThreadGroupSizes(shaderID, out uint groupSizeX, out _, out _);
         int dispatchSize = Mathf.CeilToInt((float)_voxels.Capacity / groupSizeX);
         _computeShaderMeshGen.Dispatch(shaderID, dispatchSize, 1, 1);
-
 
         AsyncGPUReadback.Request(_verticesBuffer, request =>
         {
