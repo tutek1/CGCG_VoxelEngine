@@ -123,6 +123,7 @@ public class Chunk : MonoBehaviour
                         float z = voxelRealPostion.z / scale * frequency + randomOffset;
 
                         float perlin = Mathf.Abs(Mathf.PerlinNoise(x, z) * 2 - 1);
+                        perlin *= perlin;
                         maxPossibleNoise += 1 * amplitude;
                         noise += perlin * amplitude;
                         frequency *= _frequencyDiff;
@@ -136,15 +137,41 @@ public class Chunk : MonoBehaviour
                     height = Random.value * _terrainHeight;
                 }
 
+                if (height < 2*_voxelScale) height = _voxelScale * 2;
+
 
                 int voxelY = 0;
                 float currentRealHeight = 0;
                 do
                 {
+                    float noiseColorOffset = Mathf.PerlinNoise(voxelRealPostion.x / 100 + 1002f, voxelRealPostion.z / 100 + 2093f) * 0.6f;
+
                     // Generate a noise color for each voxel for now
                     Color color;
+
+                    // Bedrock
+                    if (voxelY == 0)
+                    {
+                        color = new Color(0.1f, 0.1f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
+                    // Top grass block
+                    else if (currentRealHeight + _voxelScale >= height)
+                    {
+                        color = new Color(0.1f, 0.8f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
+                    // Dirt below
+                    else if (currentRealHeight + _voxelScale * (3 + Random.value*2) >= height)
+                    {
+                        color = new Color(0.61f, 0.30f, 0.08f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
+                    // Stone
+                    else
+                    {
+                        color = new Color(0.4f, 0.4f, 0.4f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
+                    
                     //color = new Color(Random.value, Random.value, Random.value);
-                    color = new Color(noise, noise, noise);
+                    //color = new Color(noise, noise, noise);
                     
                     _voxels[new Vector3(voxelX, voxelY, voxelZ)] 
                         = new Voxel() {position = new Vector3(voxelX, voxelY, voxelZ), color=color, ID = 1};

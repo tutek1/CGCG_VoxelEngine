@@ -7,7 +7,7 @@ using Random = UnityEngine.Random;
 
 public class GenerateWorld : MonoBehaviour
 {
-    public const int MAX_HEIGHT = 100;
+    public const int MAX_HEIGHT = 256;
 
     public const int CHUNK_SIZE = 16;
 
