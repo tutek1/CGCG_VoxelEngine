@@ -22,6 +22,7 @@ public class Chunk : MonoBehaviour
     [SerializeField] private float _amplitudeDiff;
     [SerializeField] private float _scale;
     [SerializeField] private int _terrainHeight;
+    [SerializeField] private int _chunk_size;
     
     private float _voxelScale;
     [SerializeField] private LODs _lod;
@@ -59,13 +60,14 @@ public class Chunk : MonoBehaviour
         Original = 1,
         Half = 2,
         Quarter = 3,
-        Eight = 4,
+        Eighth = 4,
+        Sixteenth = 5,
         
     }
 
     private void Start()
     {
-        InvokeRepeating(nameof(CheckLOD), 0.0f + Random.Range(0.0f, 1.0f), 1.0f);   
+        InvokeRepeating(nameof(CheckLOD), 0.0f + Random.Range(0.0f, 5.0f), 5.0f);   
     }
     
     private void FixedUpdate()
@@ -75,7 +77,7 @@ public class Chunk : MonoBehaviour
         {
             reloadAll = false;
             Init(_generateWorld, GetComponent<MeshRenderer>().material, _computeShaderMeshGen, _player);
-            GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkBounds.x);
+            GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkBounds.x, _chunk_size);
             GenerateMesh(_lod, true);
         }
 
@@ -107,7 +109,7 @@ public class Chunk : MonoBehaviour
 
     public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequencyDiff,
                                float amplitudeDiff, float scale,
-                               int terrainHeight, int voxelsInChunk)
+                               int terrainHeight, int voxelsInChunk, int chunkSize)
     {
         _useNoise = useNoise;
         _seed = seed;
@@ -116,8 +118,9 @@ public class Chunk : MonoBehaviour
         _amplitudeDiff = amplitudeDiff;
         _scale = scale;
         _terrainHeight = terrainHeight;
+        _chunk_size = chunkSize;
 
-        _voxelScale = (float)GenerateWorld.CHUNK_SIZE / voxelsInChunk;
+        _voxelScale = (float)_chunk_size / voxelsInChunk;
         _chunkBounds = new Vector3Int(voxelsInChunk, Mathf.CeilToInt(GenerateWorld.MAX_HEIGHT / _voxelScale), voxelsInChunk);
         _voxels = new VoxelArray(_chunkBounds.x, _chunkBounds.y);
 
@@ -157,13 +160,14 @@ public class Chunk : MonoBehaviour
                     }
 
                     noise = Mathf.InverseLerp(0, maxPossibleNoise, noise);
-                    height = noise * _terrainHeight;
+                    height = (noise + 0.1f) * _terrainHeight * 2;
                 }
                 else {
                     height = Random.value * _terrainHeight;
                 }
 
-                if (height < 2*_voxelScale) height = _voxelScale * 2;
+                // Min 10 blocks
+                if (height < 10*_voxelScale) height = _voxelScale * 10;
 
                 int voxelY = 0;
                 float currentRealHeight = 0;
@@ -179,13 +183,23 @@ public class Chunk : MonoBehaviour
                     {
                         color = new Color(0.1f, 0.1f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
+                    // snow
+                    else if (currentRealHeight > _terrainHeight*0.8f)
+                    {
+                        color = new Color(0.9f, 0.9f, 0.9f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
+                    // Mountain stone
+                    else if (currentRealHeight > _terrainHeight*0.5f)
+                    {
+                        color = new Color(0.5f, 0.5f, 0.5f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
+                    }
                     // Top 3 grass block
                     else if (currentRealHeight + _voxelScale * 3 >= height)
                     {
                         color = new Color(0.1f, 0.8f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
                     // Dirt below
-                    else if (currentRealHeight + _voxelScale * (9 + Random.value*2) >= height)
+                    else if (currentRealHeight + _voxelScale * (6 + Random.value*2) >= height)
                     {
                         color = new Color(0.61f, 0.30f, 0.08f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
@@ -195,8 +209,6 @@ public class Chunk : MonoBehaviour
                         color = new Color(0.4f, 0.4f, 0.4f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
                     
-                    //color = new Color(Random.value, Random.value, Random.value);
-                    //color = new Color(noise, noise, noise);
                     
                     _voxels[new Vector3(voxelX, voxelY, voxelZ)] 
                         = new Voxel() {position = new Vector3(voxelX, voxelY, voxelZ), color=color, ID = 1};
@@ -320,9 +332,9 @@ public class Chunk : MonoBehaviour
         pos -= transform.position;
         pos -= Vector3.one * _voxelScale * 0.5f;
         pos -= normal * _voxelScale * 0.5f;
-        float voxelX = Mathf.RoundToInt((pos.x / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
-        float voxelY = Mathf.RoundToInt((pos.y / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
-        float voxelZ = Mathf.RoundToInt((pos.z / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelX = Mathf.RoundToInt((pos.x / _chunk_size) * _chunkBounds.x);
+        float voxelY = Mathf.RoundToInt((pos.y / _chunk_size) * _chunkBounds.x);
+        float voxelZ = Mathf.RoundToInt((pos.z / _chunk_size) * _chunkBounds.x);
         Vector3 voxelPos = new Vector3(voxelX, voxelY, voxelZ);
 
         for (float x = -area; x <= area; x++)
@@ -338,7 +350,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.x < 0)
                     {
                         newPos.x += _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
@@ -348,7 +360,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.x >= _chunkBounds.x)
                     {
                         newPos.x -= _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
@@ -362,7 +374,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.z < 0)
                     {
                         newPos.z += _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
@@ -372,7 +384,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.z >= _chunkBounds.x)
                     {
                         newPos.z -= _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.DestroyVoxelFromOtherChunk(newPos);
@@ -398,9 +410,9 @@ public class Chunk : MonoBehaviour
         pos -= transform.position;
         pos -= Vector3.one * _voxelScale * 0.5f;
         pos += normal * _voxelScale * 0.5f;
-        float voxelX = Mathf.RoundToInt((pos.x / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
-        float voxelY = Mathf.RoundToInt((pos.y / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
-        float voxelZ = Mathf.RoundToInt((pos.z / GenerateWorld.CHUNK_SIZE) * _chunkBounds.x);
+        float voxelX = Mathf.RoundToInt((pos.x / _chunk_size) * _chunkBounds.x);
+        float voxelY = Mathf.RoundToInt((pos.y / _chunk_size) * _chunkBounds.x);
+        float voxelZ = Mathf.RoundToInt((pos.z / _chunk_size) * _chunkBounds.x);
         Vector3 voxelPos = new Vector3(voxelX, voxelY, voxelZ);
 
         for (float x = -area; x <= area; x++)
@@ -416,7 +428,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.x < 0)
                     {
                         newPos.x += _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.left * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
@@ -426,7 +438,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.x >= _chunkBounds.x)
                     {
                         newPos.x -= _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.right * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
@@ -440,7 +452,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.z < 0)
                     {
                         newPos.z += _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.back * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
@@ -450,7 +462,7 @@ public class Chunk : MonoBehaviour
                     if (newPos.z >= _chunkBounds.x)
                     {
                         newPos.z -= _chunkBounds.x;
-                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * GenerateWorld.CHUNK_SIZE);
+                        Chunk otherChunk = _generateWorld.GetChunk(transform.position + Vector3.forward * _chunk_size);
                         if (otherChunk != null)
                         {
                             otherChunk.CreateVoxelFromOtherChunk(newPos);
@@ -462,7 +474,7 @@ public class Chunk : MonoBehaviour
                     if (voxel.ID != 0) continue;
                     voxel.ID = 1;
                     voxel.position = newPos;
-                    voxel.color = new Color(0f,0.8f,0f,0f);
+                    voxel.color = new Color(Random.value,Random.value,Random.value,0f);
                     _voxels[newPos] = voxel;
                     _hasChunkChanged = true;
                     DefferedGenerateMesh();
@@ -488,7 +500,7 @@ public class Chunk : MonoBehaviour
         if (voxel.ID != 0) return;
         voxel.ID = 1;
         voxel.position = voxelPos;
-        voxel.color = new Color(0f,0.8f,0f,0f);
+        voxel.color = new Color(Random.value,Random.value,Random.value,0f);
         _voxels[voxelPos] = voxel;
         _hasChunkChanged = true;
         DefferedGenerateMesh();
@@ -501,14 +513,26 @@ public class Chunk : MonoBehaviour
 
     private void CheckLOD()
     {
-        Vector3 chunkPos = transform.position + Vector3.one * (GenerateWorld.CHUNK_SIZE/2);
+        Vector3 chunkPos = transform.position + Vector3.one * (_chunk_size/2);
         chunkPos.y = _player.position.y;
         float distance = (chunkPos - _player.position).magnitude;
-        float lerpCoef = (distance - _generateWorld.GetLODingStart() * GenerateWorld.CHUNK_SIZE)/(_generateWorld.GetViewDistance()* GenerateWorld.CHUNK_SIZE);
+
+        // In case of too far away delete
+        if (distance > (_generateWorld.GetViewDistance() + _generateWorld.GetDeleteOffset()) * _chunk_size)
+        {
+            _generateWorld.RemoveChunk(transform.position);
+            Destroy(gameObject);
+            return;
+        }
+
+        float lerpCoefLower = (distance - _generateWorld.GetLODingStart() * _chunk_size)/(_generateWorld.GetViewDistance()* _chunk_size);
+        float lerpCoefUpper = (distance - _generateWorld.GetLODingStart() * _chunk_size)/((_generateWorld.GetViewDistance() + _generateWorld.GetDeleteOffset()) * _chunk_size);
 
         // lerp(maxDetail, minDetail, distance - LODstart)
-        float LODLerp = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoef);
-        LODs lod = (LODs)LODLerp;
+        float LODLerpLower = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoefLower);
+        float LODLerpUpper = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoefUpper);
+
+        LODs lod = (LODs)Mathf.RoundToInt((LODLerpLower + LODLerpUpper)/2.0f);
 
         if (_lod != lod)
         {

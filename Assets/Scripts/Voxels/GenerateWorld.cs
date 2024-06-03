@@ -7,11 +7,12 @@ using Random = UnityEngine.Random;
 
 public class GenerateWorld : MonoBehaviour
 {
-    public const int MAX_HEIGHT = 256;
+    public const int MAX_HEIGHT = 128;
 
-    public const int CHUNK_SIZE = 16;
 
     [Header("Chunks")]
+    [SerializeField] private int _chunk_size = 32;
+
     [SerializeField] private int _voxelsInChunk = 32;
     [SerializeField] private Material _voxelMaterial;
     [SerializeField] private ComputeShader _computerShader;
@@ -31,17 +32,18 @@ public class GenerateWorld : MonoBehaviour
     [SerializeField] private Transform _playerTransform;
     [SerializeField] private int _viewDistance = 8;
     [SerializeField] private Chunk.LODs _maxDetail = Chunk.LODs.Original;
-    [SerializeField] private Chunk.LODs _minDetail = Chunk.LODs.Eight;
-    [SerializeField] [Range(1, 12)] private int _LODingStart = 1;
+    [SerializeField] private Chunk.LODs _minDetail = Chunk.LODs.Eighth;
+    [SerializeField] [Range(-4, 20)] private int _LODingStart = 8;
+    [SerializeField] [Range(0, 20)] private int _deleteOffset = 4;
+    [SerializeField] [Range(1, 40)] private int _numChunksToCheck = 10;
 
     
     private Dictionary<Vector3, Chunk> _chunks = new Dictionary<Vector3, Chunk>();
+
     
     void Start()
     {
-        InvokeRepeating(nameof(CheckChunksToRemove), 0.5f, 1.0f);
-        InvokeRepeating(nameof(CheckChunksToCreate), 0.0f, 1.0f);
-
+        GenerateAllChunks();
     }
 
     // DEBUG
@@ -51,6 +53,12 @@ public class GenerateWorld : MonoBehaviour
             _generate = false;
             ReGenerate();
         }
+
+    }
+
+    private void Update()
+    {
+        CheckAChunkToCreate();
     }
 
     private void ReGenerate()
@@ -61,65 +69,86 @@ public class GenerateWorld : MonoBehaviour
         {
             Destroy(transform.GetChild(i).gameObject);
         }
+
+        GenerateAllChunks();
     }
 
     private void GenerateChunk(int x, int z, Chunk.LODs detail)
     {
         // Set name, position, scale and parent
         Chunk chunk = new GameObject("Chunk[" + x +"," + z + "]").AddComponent<Chunk>();
-        Vector3 chunkPosition = new Vector3(x * CHUNK_SIZE, 0, z * CHUNK_SIZE);
+        Vector3 chunkPosition = new Vector3(x * _chunk_size, 0, z * _chunk_size);
         chunk.transform.position = chunkPosition;
         chunk.transform.SetParent(transform);
 
         // Initialize the chunks and create the meshes
         chunk.Init(this, _voxelMaterial, _computerShader, _playerTransform);
-        chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _voxelsInChunk);
-        chunk.GenerateMesh(detail);
+        chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _voxelsInChunk, _chunk_size);
+        chunk.DefferedGenerateMesh();
         _chunks.Add(chunkPosition, chunk);
     }
 
-    private void CheckChunksToRemove()
-    {
-        List<Vector3> keysToDelete = new List<Vector3>();
-        Vector3 playerPos = _playerTransform.position;
-        playerPos.y = 0;
-
-        foreach (var chunkPos in _chunks.Keys)
-        {
-
-            if (Vector3.Distance(chunkPos, playerPos) > (_viewDistance + _LODingStart) * CHUNK_SIZE)
-            {
-                keysToDelete.Add(chunkPos);
-            }
-        }
-
-        foreach (Vector3 chunkPos in keysToDelete)
-        {
-            Chunk chunk = _chunks[chunkPos];
-            Destroy(chunk.gameObject);
-            _chunks.Remove(chunkPos);
-        }
-    }
-
-    private void CheckChunksToCreate()
+    private int currentX = int.MaxValue;
+    private int currentZ = int.MaxValue;
+    private void CheckAChunkToCreate()
     {
         Vector3 playerPos = _playerTransform.position;
         playerPos.y = 0;
-        int xMid = Mathf.RoundToInt(playerPos.x / CHUNK_SIZE);
-        int zMid = Mathf.RoundToInt(playerPos.z / CHUNK_SIZE);
+        int xMid = Mathf.RoundToInt(playerPos.x / _chunk_size);
+        int zMid = Mathf.RoundToInt(playerPos.z / _chunk_size);
 
         int xStart = xMid - _viewDistance;
         int xEnd = xMid + _viewDistance;
 
         int zStart = zMid - _viewDistance;
         int zEnd = zMid + _viewDistance;
+
+        if (currentX == int.MaxValue) currentX = xStart;
+        if (currentZ == int.MaxValue) currentZ = zStart;
+
+
+        for (int updateIdx = 0; updateIdx < _numChunksToCheck; updateIdx++)
+        {
+            currentX++;
+            if (currentX > xEnd)
+            {
+                currentX = xStart;
+                currentZ++;
+                if (currentZ > zEnd)
+                {
+                    currentZ = zStart;
+                }
+
+            }
+            Vector3 chunkPos = new Vector3(currentX, 0, currentZ) * _chunk_size;
+            if ((chunkPos - playerPos).magnitude > _viewDistance * _chunk_size) continue;
+            if (_chunks.ContainsKey(chunkPos)) continue;
+
+            GenerateChunk(currentX, currentZ, _minDetail);
+        }
         
+    }
+
+    private void GenerateAllChunks()
+    {
+        // Generate all chunks
+        Vector3 playerPos = _playerTransform.position;
+        playerPos.y = 0;
+        int xMid = Mathf.RoundToInt(playerPos.x / _chunk_size);
+        int zMid = Mathf.RoundToInt(playerPos.z / _chunk_size);
+
+        int xStart = xMid - _viewDistance;
+        int xEnd = xMid + _viewDistance;
+
+        int zStart = zMid - _viewDistance;
+        int zEnd = zMid + _viewDistance;
+
         for (int x = xStart; x <= xEnd; x++)
         {
             for (int z = zStart; z <= zEnd; z++)
             {
-                Vector3 chunkPos = new Vector3(x, 0, z) * CHUNK_SIZE;
-                if ((chunkPos - playerPos).magnitude > _viewDistance * CHUNK_SIZE) continue;
+                Vector3 chunkPos = new Vector3(x, 0, z) * _chunk_size;
+                if ((chunkPos - playerPos).magnitude > _viewDistance * _chunk_size) continue;
                 if (_chunks.ContainsKey(chunkPos)) continue;
                 GenerateChunk(x, z, _minDetail);
             }
@@ -129,6 +158,12 @@ public class GenerateWorld : MonoBehaviour
     public Chunk GetChunk(Vector3 pos)
     {
         return _chunks.ContainsKey(pos) ? _chunks[pos] : null;
+    }
+
+    public void RemoveChunk(Vector3 pos)
+    {
+        pos.y = 0;
+        _chunks.Remove(pos);
     }
 
     public Chunk.LODs GetMinDetail()
@@ -149,6 +184,11 @@ public class GenerateWorld : MonoBehaviour
     public int GetViewDistance()
     {
         return _viewDistance;
+    }
+
+    public int GetDeleteOffset()
+    {
+        return _deleteOffset;
     }
 
 }

@@ -102,7 +102,7 @@ inline int IndexFromCoord(float x, float y, float z)
     return x + z * voxels_size.x + y * voxels_size.x * voxels_size.x;
 }
 
-[numthreads(16, 1, 1)]
+[numthreads(32, 1, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     uint th_idx = id.x; // 1D index in the voxel array

@@ -522,22 +522,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5724d32e8ee1fcb4a9f794b866336f0b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _voxelsInChunk: 16
+  _chunk_size: 32
+  _voxelsInChunk: 32
   _voxelMaterial: {fileID: 2100000, guid: b61f6e742a10c4e438f5e29af64c1c35, type: 2}
   _computerShader: {fileID: 7200000, guid: 2a6a7c23a6cdb184b9e85e4103099ca0, type: 3}
   _useNoise: 1
-  _seed: 13
-  _octaves: 4
+  _seed: 7
+  _octaves: 3
   _frequencyDiff: 2
   _amplitudeDiff: 0.4
-  _scale: 150
-  _terrainHeight: 80
-  _generate: 1
+  _scale: 175
+  _terrainHeight: 60
+  _generate: 0
   _playerTransform: {fileID: 112315320}
-  _viewDistance: 15
+  _viewDistance: 10
   _maxDetail: 1
   _minDetail: 4
-  _LODingStart: 1
+  _LODingStart: 2
+  _deleteOffset: 2
+  _numChunksToCheck: 10
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
