@@ -37,12 +37,12 @@ public class VoxelArray
 
     int IndexFromCoord(Vector3 idx)
     {
-        return Mathf.RoundToInt(idx.x) + (Mathf.RoundToInt(idx.y) * size.x) + (Mathf.RoundToInt(idx.z) * size.x * size.y);
+        return Mathf.RoundToInt(idx.x) + (Mathf.RoundToInt(idx.z) * size.x) + (Mathf.RoundToInt(idx.y) * size.x * size.x);
     }
 
     int IndexFromCoord(float x, float y, float z)
     {
-        return Mathf.RoundToInt(x) + (Mathf.RoundToInt(y) * size.x) + (Mathf.RoundToInt(z) * size.x * size.y);
+        return Mathf.RoundToInt(x) + (Mathf.RoundToInt(z) * size.x) + (Mathf.RoundToInt(y) * size.x * size.x);
     }
 
 
@@ -52,9 +52,9 @@ public class VoxelArray
             return;
         _count = 0;
         for (int x = 0; x < size.x; x++)
-            for (int y = 0; y < size.y; y++)
-                for (int z = 0; z < size.x; z++)
-                    array[x + (y * size.x) + (z * size.x * size.y)] = new Voxel();
+            for (int z = 0; z < size.x; z++)
+                for (int y = 0; y < size.y; y++)
+                    array[IndexFromCoord(x, y, z)] = new Voxel();
     }
 
     public int Capacity

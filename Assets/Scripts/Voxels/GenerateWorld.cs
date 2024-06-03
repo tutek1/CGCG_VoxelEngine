@@ -27,12 +27,12 @@ public class GenerateWorld : MonoBehaviour
     [SerializeField] private int _terrainHeight = 40;
     [SerializeField] private bool _generate = false;
 
-    [Header("Realtime LODing")]
+    [Header("Performance and Realtime LODing")]
     [SerializeField] private Transform _playerTransform;
     [SerializeField] private int _viewDistance = 8;
-    [SerializeField] private int _maxDetailDistance = 5;
-    [SerializeField] private int _minDetail = 4;
-    [SerializeField] [Range(1, 12)] private int _LODingOffset = 1;
+    [SerializeField] private Chunk.LODs _maxDetail = Chunk.LODs.Original;
+    [SerializeField] private Chunk.LODs _minDetail = Chunk.LODs.Eight;
+    [SerializeField] [Range(1, 12)] private int _LODingStart = 1;
 
     
     private Dictionary<Vector3, Chunk> _chunks = new Dictionary<Vector3, Chunk>();
@@ -41,6 +41,7 @@ public class GenerateWorld : MonoBehaviour
     {
         InvokeRepeating(nameof(CheckChunksToRemove), 0.5f, 1.0f);
         InvokeRepeating(nameof(CheckChunksToCreate), 0.0f, 1.0f);
+
     }
 
     // DEBUG
@@ -62,7 +63,7 @@ public class GenerateWorld : MonoBehaviour
         }
     }
 
-    private void GenerateChunk(int x, int z)
+    private void GenerateChunk(int x, int z, Chunk.LODs detail)
     {
         // Set name, position, scale and parent
         Chunk chunk = new GameObject("Chunk[" + x +"," + z + "]").AddComponent<Chunk>();
@@ -71,9 +72,9 @@ public class GenerateWorld : MonoBehaviour
         chunk.transform.SetParent(transform);
 
         // Initialize the chunks and create the meshes
-        chunk.Init(this, _voxelMaterial, _computerShader);
+        chunk.Init(this, _voxelMaterial, _computerShader, _playerTransform);
         chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _voxelsInChunk);
-        chunk.GenerateMesh();
+        chunk.GenerateMesh(detail);
         _chunks.Add(chunkPosition, chunk);
     }
 
@@ -86,7 +87,7 @@ public class GenerateWorld : MonoBehaviour
         foreach (var chunkPos in _chunks.Keys)
         {
 
-            if (Vector3.Distance(chunkPos, playerPos) > (_viewDistance + _LODingOffset) * CHUNK_SIZE)
+            if (Vector3.Distance(chunkPos, playerPos) > (_viewDistance + _LODingStart) * CHUNK_SIZE)
             {
                 keysToDelete.Add(chunkPos);
             }
@@ -107,20 +108,20 @@ public class GenerateWorld : MonoBehaviour
         int xMid = Mathf.RoundToInt(playerPos.x / CHUNK_SIZE);
         int zMid = Mathf.RoundToInt(playerPos.z / CHUNK_SIZE);
 
-        int xStart = (xMid - _viewDistance + _LODingOffset/2);
-        int xEnd = (xMid + _viewDistance - _LODingOffset/2);
+        int xStart = xMid - _viewDistance;
+        int xEnd = xMid + _viewDistance;
 
-        int zStart = (zMid - _viewDistance + _LODingOffset/2);
-        int zEnd = (zMid + _viewDistance - _LODingOffset/2);
+        int zStart = zMid - _viewDistance;
+        int zEnd = zMid + _viewDistance;
         
         for (int x = xStart; x <= xEnd; x++)
         {
             for (int z = zStart; z <= zEnd; z++)
             {
                 Vector3 chunkPos = new Vector3(x, 0, z) * CHUNK_SIZE;
-                if ((chunkPos - playerPos).magnitude > (_viewDistance - _LODingOffset) * CHUNK_SIZE) continue;
+                if ((chunkPos - playerPos).magnitude > _viewDistance * CHUNK_SIZE) continue;
                 if (_chunks.ContainsKey(chunkPos)) continue;
-                GenerateChunk(x, z);
+                GenerateChunk(x, z, _minDetail);
             }
         }
     }
@@ -129,4 +130,25 @@ public class GenerateWorld : MonoBehaviour
     {
         return _chunks.ContainsKey(pos) ? _chunks[pos] : null;
     }
+
+    public Chunk.LODs GetMinDetail()
+    {
+        return _minDetail;
+    }
+
+    public Chunk.LODs GetMaxDetail()
+    {
+        return _maxDetail;
+    }
+
+    public int GetLODingStart()
+    {
+        return _LODingStart;
+    }
+
+    public int GetViewDistance()
+    {
+        return _viewDistance;
+    }
+
 }

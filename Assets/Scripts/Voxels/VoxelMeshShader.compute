@@ -81,6 +81,7 @@ static const float3 VOXEL_NORMS[6] =
 int voxel_count;
 float2 voxels_size;
 float voxel_scale;
+int lod;
 StructuredBuffer<Voxel> voxels;
 
 // OUTPUT
@@ -91,19 +92,63 @@ RWStructuredBuffer<float3> normals;
 RWStructuredBuffer<int> faces;
 RWStructuredBuffer<int> counters;
 
-int IndexFromCoord(float3 idx)
+inline int IndexFromCoord(float3 idx)
 {
-    return round(idx.x) + round(idx.y) * voxels_size.x + round(idx.z) * voxels_size.x * voxels_size.y;
+    return idx.x + idx.z * voxels_size.x + idx.y * voxels_size.x * voxels_size.x;
 }
 
-[numthreads(128, 1, 1)]
+inline int IndexFromCoord(float x, float y, float z)
+{
+    return x + z * voxels_size.x + y * voxels_size.x * voxels_size.x;
+}
+
+[numthreads(16, 1, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-    int idx = id.x;
-    if (idx >= voxel_count) return;
+    uint th_idx = id.x; // 1D index in the voxel array
+
+    // Calculate the number of voxels per row and per slice (layer) considering the LOD
+    int voxels_per_row = int(voxels_size.x);
+    int voxels_per_layer = voxels_per_row * voxels_per_row;
+    int loded_voxels_per_layer = (voxels_per_row/lod) * (voxels_per_row/lod);
+
+    // Calculate coordinates
+    int x_coord = (th_idx * lod) % voxels_per_row;
+    int z_coord = (((th_idx % loded_voxels_per_layer) * lod) / voxels_per_row) * lod;
+    int y_coord = ((th_idx) / (loded_voxels_per_layer)) * lod;
+
+    int idx = IndexFromCoord(x_coord, y_coord, z_coord);
 
     Voxel voxel = voxels[idx];
     if (voxel.ID == 0) return;
+    
+    // Average out the color of the voxels in case of lower LODs
+    float4 avg_color = float4(0,0,0,0);
+    int valid_vox_count = 0;
+    for (int x = 0; x < lod; x++)
+    {
+        for (int z = 0; z < lod; z++)
+        {
+            for (int y = 0; y < lod; y++)
+            {
+                float3 position = voxel.pos + float3(x, y, z);
+                if (position.x >= 0 && position.x < voxels_size.x &&
+                    position.z >= 0 && position.z < voxels_size.x &&
+                    position.y >= 0 && position.y < voxels_size.y)
+                {
+                    Voxel temp_vox = voxels[IndexFromCoord(position)];
+                    if (temp_vox.ID != 0)
+                    {
+                        valid_vox_count += 1;
+                        avg_color += temp_vox.color;
+                    }
+                }
+            }
+        }   
+    }
+    avg_color /= valid_vox_count;
+    
+
 
     int vert_count = 0;
     int face_count = 0;
@@ -111,7 +156,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     // each face
     for (uint i = 0; i < 6; i++)
     {
-        float3 neighbor_pos = voxel.pos + DIRECTIONS[i];
+        // Check if face should be drawn (neighbor check)
+        float3 neighbor_pos = voxel.pos + DIRECTIONS[i] * lod;
         if (neighbor_pos.x >= 0 && neighbor_pos.x < voxels_size.x
             && neighbor_pos.z >= 0 && neighbor_pos.z < voxels_size.x
             && neighbor_pos.y >= 0 && neighbor_pos.y < voxels_size.y)
@@ -127,24 +173,24 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         InterlockedAdd(counters[0], 4, vert_count);
         InterlockedAdd(counters[1], 6, face_count);
 
-        vertices[vert_count] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][0]] + voxel.pos) * voxel_scale;
+        vertices[vert_count] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][0]] * voxel_scale * lod) + (voxel.pos * voxel_scale);
         uvs[vert_count] = VOXEL_UVS[0];
-        colors[vert_count] = voxel.color;
+        colors[vert_count] = avg_color;
         normals[vert_count] = VOXEL_NORMS[i];
 
-        vertices[vert_count + 1] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][1]] + voxel.pos) * voxel_scale;
+        vertices[vert_count + 1] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][1]] * voxel_scale * lod) + (voxel.pos * voxel_scale);
         uvs[vert_count + 1] = VOXEL_UVS[1];
-        colors[vert_count + 1] = voxel.color;
+        colors[vert_count + 1] = avg_color;
         normals[vert_count + 1] = VOXEL_NORMS[i];
 
-        vertices[vert_count + 2] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][2]] + voxel.pos) * voxel_scale;
+        vertices[vert_count + 2] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][2]] * voxel_scale * lod) + (voxel.pos * voxel_scale);
         uvs[vert_count + 2] = VOXEL_UVS[2];
-        colors[vert_count + 2] = voxel.color;
+        colors[vert_count + 2] = avg_color;
         normals[vert_count + 2] = VOXEL_NORMS[i];
 
-        vertices[vert_count + 3] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][3]] + voxel.pos) * voxel_scale;
+        vertices[vert_count + 3] = (VOXEL_VERTS[VOXEL_VERT_IDXS[i][3]] * voxel_scale * lod) + (voxel.pos * voxel_scale);
         uvs[vert_count + 3] = VOXEL_UVS[3];
-        colors[vert_count + 3] = voxel.color;
+        colors[vert_count + 3] = avg_color;
         normals[vert_count + 3] = VOXEL_NORMS[i];
 
 
@@ -155,7 +201,5 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         faces[face_count + 3] = vert_count + VOXEL_TRIS[i][3];
         faces[face_count + 4] = vert_count + VOXEL_TRIS[i][4];
         faces[face_count + 5] = vert_count + VOXEL_TRIS[i][5];
-
     }
-
 }

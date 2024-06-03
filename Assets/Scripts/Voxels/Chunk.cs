@@ -15,15 +15,22 @@ using Random = UnityEngine.Random;
 public class Chunk : MonoBehaviour
 {
     //Debug public to be private
-    public bool _useNoise;
-    public int _seed;
-    public int _octaves;
-    public float _frequencyDiff;
-    public float _amplitudeDiff;
-    public float _scale;
-    public int _terrainHeight;
+    [SerializeField] private bool _useNoise;
+    [SerializeField] private int _seed;
+    [SerializeField] private int _octaves;
+    [SerializeField] private float _frequencyDiff;
+    [SerializeField] private float _amplitudeDiff;
+    [SerializeField] private float _scale;
+    [SerializeField] private int _terrainHeight;
     
     private float _voxelScale;
+    [SerializeField] private LODs _lod;
+    [SerializeField] private int _lodPow2;
+
+
+    // DEBUG button for manual reload of chunk
+    [SerializeField] private bool reloadAll;
+    [SerializeField] private bool reloadMesh;
 
     private GenerateWorld _generateWorld;
     private VoxelArray _voxels;
@@ -31,15 +38,13 @@ public class Chunk : MonoBehaviour
     private MeshFilter _meshFilter;
     private MeshCollider _meshCollider;
     private Mesh _mesh;
+    private Transform _player;
     private ComputeShader _computeShaderMeshGen;
-    public Vector3Int _chunkBounds;
-
-
-    // DEBUG button for reload of chunk
-    public bool reload;
+    [SerializeField] private Vector3Int _chunkBounds;
 
     private bool _isGenerationRunning = false;
     private bool _regenerateMeshNextFrame = false;
+    private bool _hasChunkChanged = false;
 
     private ComputeBuffer _voxelsBuffer;
     private GraphicsBuffer _verticesBuffer;
@@ -49,26 +54,46 @@ public class Chunk : MonoBehaviour
     private GraphicsBuffer _facesBuffer;
     private ComputeBuffer _counterBuffer;
 
+    public enum LODs 
+    {
+        Original = 1,
+        Half = 2,
+        Quarter = 3,
+        Eight = 4,
+        
+    }
 
-    // DEBUG
+    private void Start()
+    {
+        InvokeRepeating(nameof(CheckLOD), 0.0f + Random.Range(0.0f, 1.0f), 1.0f);   
+    }
+    
     private void FixedUpdate()
     {
-        if (reload)
+        // DEBUG
+        if (reloadAll)
         {
-            reload = false;
-            Init(_generateWorld, GetComponent<MeshRenderer>().material, _computeShaderMeshGen);
+            reloadAll = false;
+            Init(_generateWorld, GetComponent<MeshRenderer>().material, _computeShaderMeshGen, _player);
             GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _chunkBounds.x);
-            GenerateMesh();
+            GenerateMesh(_lod, true);
+        }
+
+        // DEBUG
+        if (reloadMesh)
+        {
+            reloadMesh = false;
+            DefferedGenerateMesh();
         }
 
         if (_regenerateMeshNextFrame && !_isGenerationRunning)
         {
             _regenerateMeshNextFrame = false;
-            GenerateMesh();
+            GenerateMesh(_lod, _hasChunkChanged);
         }
     }
 
-    public void Init(GenerateWorld generateWorld, Material voxelMaterial, ComputeShader meshGenShader)
+    public void Init(GenerateWorld generateWorld, Material voxelMaterial, ComputeShader meshGenShader, Transform player)
     {
         _computeShaderMeshGen = meshGenShader;
         _meshCollider = GetComponent<MeshCollider>();
@@ -77,6 +102,7 @@ public class Chunk : MonoBehaviour
         _mesh = _meshFilter.mesh;
         _meshRenderer.material = voxelMaterial;
         _generateWorld = generateWorld;
+        _player = player;
     }
 
     public void GenerateVoxels(bool useNoise, int seed, int octaves, float frequencyDiff,
@@ -139,7 +165,6 @@ public class Chunk : MonoBehaviour
 
                 if (height < 2*_voxelScale) height = _voxelScale * 2;
 
-
                 int voxelY = 0;
                 float currentRealHeight = 0;
                 do
@@ -154,13 +179,13 @@ public class Chunk : MonoBehaviour
                     {
                         color = new Color(0.1f, 0.1f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
-                    // Top grass block
-                    else if (currentRealHeight + _voxelScale >= height)
+                    // Top 3 grass block
+                    else if (currentRealHeight + _voxelScale * 3 >= height)
                     {
                         color = new Color(0.1f, 0.8f, 0.1f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
                     // Dirt below
-                    else if (currentRealHeight + _voxelScale * (3 + Random.value*2) >= height)
+                    else if (currentRealHeight + _voxelScale * (9 + Random.value*2) >= height)
                     {
                         color = new Color(0.61f, 0.30f, 0.08f) - new Color(noiseColorOffset, noiseColorOffset, noiseColorOffset);
                     }
@@ -182,9 +207,14 @@ public class Chunk : MonoBehaviour
         }
     }
 
-    public void GenerateMesh()
+    public void GenerateMesh(LODs lod, bool ignoreLODChangeCheck = false)
     {
+        if (_isGenerationRunning) return;
         if (_voxels.Count < 1) return;
+        if (!ignoreLODChangeCheck) if (_lod == lod) return;
+
+        _lod = lod;
+        _lodPow2 = (int)Mathf.Pow(2, (int)_lod - 1);
 
         _isGenerationRunning = true;
 
@@ -220,10 +250,11 @@ public class Chunk : MonoBehaviour
         _computeShaderMeshGen.SetVector("voxels_size", (Vector2)_voxels.size);
         _computeShaderMeshGen.SetFloat("voxel_scale", _voxelScale);
         _computeShaderMeshGen.SetInt("voxel_count", _voxels.Capacity);
+        _computeShaderMeshGen.SetInt("lod", _lodPow2);
 
         // Dispatch compute shader
         _computeShaderMeshGen.GetKernelThreadGroupSizes(shaderID, out uint groupSizeX, out _, out _);
-        int dispatchSize = Mathf.CeilToInt((float)_voxels.Capacity / groupSizeX);
+        int dispatchSize = Mathf.CeilToInt(((float)_voxels.Capacity / (_lodPow2 * _lodPow2 * _lodPow2)) / groupSizeX);
         _computeShaderMeshGen.Dispatch(shaderID, dispatchSize, 1, 1);
 
         AsyncGPUReadback.Request(_verticesBuffer, request =>
@@ -350,11 +381,13 @@ public class Chunk : MonoBehaviour
                     }
 
                     Voxel voxel = _voxels[newPos];
+
                     if (voxel.ID == 0) continue;
                     voxel.ID = 0;
                     voxel.position = newPos;
                     _voxels[newPos] = voxel;
-                    _regenerateMeshNextFrame = true;
+                    _hasChunkChanged = true;
+                    DefferedGenerateMesh();
                 }
             }
         }
@@ -431,7 +464,8 @@ public class Chunk : MonoBehaviour
                     voxel.position = newPos;
                     voxel.color = new Color(0f,0.8f,0f,0f);
                     _voxels[newPos] = voxel;
-                    _regenerateMeshNextFrame = true;
+                    _hasChunkChanged = true;
+                    DefferedGenerateMesh();
                 }
             }
         }
@@ -444,6 +478,7 @@ public class Chunk : MonoBehaviour
         if (voxel.ID == 0) return;
         voxel.ID = 0;
         _voxels[voxelPos] = voxel;
+        _hasChunkChanged = true;
         DefferedGenerateMesh();
     }
 
@@ -455,6 +490,7 @@ public class Chunk : MonoBehaviour
         voxel.position = voxelPos;
         voxel.color = new Color(0f,0.8f,0f,0f);
         _voxels[voxelPos] = voxel;
+        _hasChunkChanged = true;
         DefferedGenerateMesh();
     }
 
@@ -463,16 +499,22 @@ public class Chunk : MonoBehaviour
         _regenerateMeshNextFrame = true;
     }
 
-    // public Voxel this[Vector3 index]
-    // {
-    //     get
-    //     {
-    //         return _voxels[index];
-    //     }
+    private void CheckLOD()
+    {
+        Vector3 chunkPos = transform.position + Vector3.one * (GenerateWorld.CHUNK_SIZE/2);
+        chunkPos.y = _player.position.y;
+        float distance = (chunkPos - _player.position).magnitude;
+        float lerpCoef = (distance - _generateWorld.GetLODingStart() * GenerateWorld.CHUNK_SIZE)/(_generateWorld.GetViewDistance()* GenerateWorld.CHUNK_SIZE);
 
-    //     set
-    //     {
-    //         _voxels[index] = (Voxel)value;
-    //     }
-    // }
+        // lerp(maxDetail, minDetail, distance - LODstart)
+        float LODLerp = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoef);
+        LODs lod = (LODs)LODLerp;
+
+        if (_lod != lod)
+        {
+            _hasChunkChanged = true;
+            _lod = lod;
+            DefferedGenerateMesh();
+        }
+    }
 }
