@@ -11,7 +11,7 @@ public class GenerateWorld : MonoBehaviour
 
 
     [Header("Chunks")]
-    [SerializeField] private int _chunk_size = 32;
+    [SerializeField] private int _chunkSize = 32;
 
     [SerializeField] private int _voxelsInChunk = 32;
     [SerializeField] private Material _voxelMaterial;
@@ -77,13 +77,13 @@ public class GenerateWorld : MonoBehaviour
     {
         // Set name, position, scale and parent
         Chunk chunk = new GameObject("Chunk[" + x +"," + z + "]").AddComponent<Chunk>();
-        Vector3 chunkPosition = new Vector3(x * _chunk_size, 0, z * _chunk_size);
+        Vector3 chunkPosition = new Vector3(x * _chunkSize, 0, z * _chunkSize);
         chunk.transform.position = chunkPosition;
         chunk.transform.SetParent(transform);
 
         // Initialize the chunks and create the meshes
         chunk.Init(this, _voxelMaterial, _computerShader, _playerTransform);
-        chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _voxelsInChunk, _chunk_size);
+        chunk.GenerateVoxels(_useNoise, _seed, _octaves, _frequencyDiff, _amplitudeDiff, _scale, _terrainHeight, _voxelsInChunk, _chunkSize);
         chunk.DefferedGenerateMesh();
         _chunks.Add(chunkPosition, chunk);
     }
@@ -94,8 +94,8 @@ public class GenerateWorld : MonoBehaviour
     {
         Vector3 playerPos = _playerTransform.position;
         playerPos.y = 0;
-        int xMid = Mathf.RoundToInt(playerPos.x / _chunk_size);
-        int zMid = Mathf.RoundToInt(playerPos.z / _chunk_size);
+        int xMid = Mathf.RoundToInt(playerPos.x / _chunkSize);
+        int zMid = Mathf.RoundToInt(playerPos.z / _chunkSize);
 
         int xStart = xMid - _viewDistance;
         int xEnd = xMid + _viewDistance;
@@ -120,8 +120,8 @@ public class GenerateWorld : MonoBehaviour
                 }
 
             }
-            Vector3 chunkPos = new Vector3(currentX, 0, currentZ) * _chunk_size;
-            if ((chunkPos - playerPos).magnitude > _viewDistance * _chunk_size) continue;
+            Vector3 chunkPos = new Vector3(currentX, 0, currentZ) * _chunkSize;
+            if ((chunkPos - playerPos).magnitude > _viewDistance * _chunkSize) continue;
             if (_chunks.ContainsKey(chunkPos)) continue;
 
             GenerateChunk(currentX, currentZ, _minDetail);
@@ -134,8 +134,8 @@ public class GenerateWorld : MonoBehaviour
         // Generate all chunks
         Vector3 playerPos = _playerTransform.position;
         playerPos.y = 0;
-        int xMid = Mathf.RoundToInt(playerPos.x / _chunk_size);
-        int zMid = Mathf.RoundToInt(playerPos.z / _chunk_size);
+        int xMid = Mathf.RoundToInt(playerPos.x / _chunkSize);
+        int zMid = Mathf.RoundToInt(playerPos.z / _chunkSize);
 
         int xStart = xMid - _viewDistance;
         int xEnd = xMid + _viewDistance;
@@ -147,8 +147,8 @@ public class GenerateWorld : MonoBehaviour
         {
             for (int z = zStart; z <= zEnd; z++)
             {
-                Vector3 chunkPos = new Vector3(x, 0, z) * _chunk_size;
-                if ((chunkPos - playerPos).magnitude > _viewDistance * _chunk_size) continue;
+                Vector3 chunkPos = new Vector3(x, 0, z) * _chunkSize;
+                if ((chunkPos - playerPos).magnitude > _viewDistance * _chunkSize) continue;
                 if (_chunks.ContainsKey(chunkPos)) continue;
                 GenerateChunk(x, z, _minDetail);
             }

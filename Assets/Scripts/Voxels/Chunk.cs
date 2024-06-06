@@ -67,7 +67,7 @@ public class Chunk : MonoBehaviour
 
     private void Start()
     {
-        InvokeRepeating(nameof(CheckLOD), 0.0f + Random.Range(0.0f, 5.0f), 5.0f);   
+        InvokeRepeating(nameof(CheckLOD), 0.0f + Random.Range(0.0f, 2.5f), 2.5f);   
     }
     
     private void FixedUpdate()
@@ -525,14 +525,12 @@ public class Chunk : MonoBehaviour
             return;
         }
 
-        float lerpCoefLower = (distance - _generateWorld.GetLODingStart() * _chunk_size)/(_generateWorld.GetViewDistance()* _chunk_size);
-        float lerpCoefUpper = (distance - _generateWorld.GetLODingStart() * _chunk_size)/((_generateWorld.GetViewDistance() + _generateWorld.GetDeleteOffset()) * _chunk_size);
+        float lerpCoef = (distance - _generateWorld.GetLODingStart() * _chunk_size)/(_generateWorld.GetViewDistance()* _chunk_size);
 
         // lerp(maxDetail, minDetail, distance - LODstart)
-        float LODLerpLower = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoefLower);
-        float LODLerpUpper = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoefUpper);
+        float LODLerpLower = Mathf.Lerp((int)_generateWorld.GetMaxDetail(), (int)_generateWorld.GetMinDetail(), lerpCoef);
 
-        LODs lod = (LODs)Mathf.RoundToInt((LODLerpLower + LODLerpUpper)/2.0f);
+        LODs lod = (LODs)Mathf.RoundToInt(LODLerpLower);
 
         if (_lod != lod)
         {

@@ -148,8 +148,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     }
     avg_color /= valid_vox_count;
     
-
-
     int vert_count = 0;
     int face_count = 0;
 
